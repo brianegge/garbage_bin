@@ -1,0 +1,25 @@
+From a01bab958db9fb69083677ea5fd3e6ecae5818ca Mon Sep 17 00:00:00 2001
+From: Brian Egge <brianegge@gmail.com>
+Date: Sat, 15 Feb 2020 20:17:26 -0500
+Subject: [PATCH] Apply patch per
+ https://devtalk.nvidia.com/default/topic/1069027/tensorrt/parsing-gridanchor-op-_gridanchor_trt-protobuf-repeated_field-h-1408-check-failed-index-lt-current_size_-/post/5415537/#5415537
+
+---
+ .../anchor_generators/multiple_grid_anchor_generator.py          | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/research/object_detection/anchor_generators/multiple_grid_anchor_generator.py b/research/object_detection/anchor_generators/multiple_grid_anchor_generator.py
+index 86007c99..aa14cea1 100644
+--- a/research/object_detection/anchor_generators/multiple_grid_anchor_generator.py
++++ b/research/object_detection/anchor_generators/multiple_grid_anchor_generator.py
+@@ -313,6 +313,7 @@ def create_ssd_anchors(num_layers=6,
+   """
+   if base_anchor_size is None:
+     base_anchor_size = [1.0, 1.0]
++  base_anchor_size = tf.constant(base_anchor_size, dtype=tf.float32)
+   box_specs_list = []
+   if scales is None or not scales:
+     scales = [min_scale + (max_scale - min_scale) * i / (num_layers - 1)
+-- 
+2.17.1
+
