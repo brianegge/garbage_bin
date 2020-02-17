@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/bin/bash -x
+
+set -o errexit
 
 source=/home/egge/gdrive//dev/garbage_bin/frozen_inference_graph.pb
 dest=flask/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin
