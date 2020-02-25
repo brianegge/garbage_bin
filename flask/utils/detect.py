@@ -1,4 +1,3 @@
-
 import numpy
 import cv2
 import tensorflow as tf
@@ -21,6 +20,25 @@ def sanitize(j):
     for k,v in j.items():
         o[k.replace(' ','_')] = v
     return o
+
+def detect(model,request):
+    #read image file string data
+    img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    if img is None:
+        return ['Error reading image']
+    boxes, confs, clss = model.detect(img)
+    maxes={}
+    for i,_ in enumerate(confs):
+        conf = confs[i]
+        cls = clss[i]
+        if not cls in maxes:
+            maxes[cls] = conf
+        if conf > maxes[cls]:
+            maxes[cls] = conf
+    o={}
+    for k,v in maxes.items():
+        o[cls_dict[k]] = v
+    return sanitize(o)
 
 def detectit(request):
     #read image file string data

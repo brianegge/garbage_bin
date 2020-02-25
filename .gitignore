@@ -1,1 +1,12 @@
+*.pyc
+annotations/label_map.pbtxt
+annotations/test.record
+annotations/test_labels.csv
+annotations/train.record
+annotations/train_labels.csv
+fine_tuned_model/
 flask/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin
+images/*.jpg
+images/*.png
+images/*.xml
+training/
