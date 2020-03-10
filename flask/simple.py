@@ -7,7 +7,7 @@ Usage::
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import cgi
 import logging
-from utils.detect import detect
+from utils.detect import detect,detectframe
 from utils.ssd import TrtSSD
 import pycuda.autoinit
 import json
@@ -23,7 +23,10 @@ class S(BaseHTTPRequestHandler):
     def do_GET(self):
         logging.info("GET request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
         self._set_response()
-        self.wfile.write("GET request for {}".format(self.path).encode('utf-8'))
+        out = json.dumps(detectframe(ssd)).encode('utf-8')
+        print(out)
+        self.wfile.write(out)
+        #self.wfile.write("GET request for {}".format(self.path).encode('utf-8'))
 
     def do_POST(self):
         form = cgi.FieldStorage(
@@ -45,7 +48,7 @@ def run(server_class=HTTPServer, handler_class=S, port=8080):
     logging.basicConfig(level=logging.INFO)
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    logging.info('Starting httpd...\n')
+    logging.info('Starting httpd on port {}...\n'.format(port))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

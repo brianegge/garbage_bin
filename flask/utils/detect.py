@@ -10,6 +10,7 @@ from flask import g
 # import pycuda.autoinit  # This is needed for initializing CUDA driver
 from utils.ssd import TrtSSD
 import pycuda.driver as cuda
+import imageio
 
 MODEL='ssd_mobilenet_v1_garbage_bin'
 cls_dict = get_cls_dict()
@@ -65,20 +66,14 @@ def detectit(request):
         o[cls_dict[k]] = v
     return sanitize(o)
 
-def detectframe(request):
-    print('capturing frame')
-    subprocess.call('/home/egge/garbage_bin/scripts/capture.sh')
-    print('getting cuda context')
-    cuda.init()
-    device = cuda.Device(0) # enter your gpu id here
-    ctx = device.make_context()
-    print('loading model')
-    ssd = TrtSSD(MODEL, INPUT_HW)
+def detectframe(model):
     #read image file string data
-    _, img = cv2.VideoCapture('/tmp/ramdisk/frame.jpg').read()
-    print('detecting')
-    boxes, confs, clss = ssd.detect(img)
-    ctx.pop()
+    url = "http://garage.local:8085/?action=snapshot"
+    img = imageio.imread(url)
+    #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    if img is None:
+        return ['Error reading image']
+    boxes, confs, clss = model.detect(img)
     maxes={}
     for i,_ in enumerate(confs):
         conf = confs[i]
