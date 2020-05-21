@@ -14,3 +14,22 @@ python3 ~/dev/labelImg/labelImg.py . labels.txt
 ```
 DISPLAY=:0 /home/egge/labelImg/labelImg.py images/ images/labels.txt
 ```
+
+Install service
+```
+$ cat /etc/systemd/system/garbage_bin_detector.service
+[Unit]
+Description=Image processor to find the garbage bin
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=egge
+WorkingDirectory=/home/egge/garbage_bin/flask
+ExecStart=/home/egge/garbage_bin/flask/simple.py
+
+[Install]
+WantedBy=multi-user.target
+```
