@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """
 Very simple HTTP server in python for logging requests
 Usage::
@@ -21,12 +21,9 @@ class S(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        logging.info("GET request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
         self._set_response()
         out = json.dumps(detectframe(ssd)).encode('utf-8')
-        print(out)
         self.wfile.write(out)
-        #self.wfile.write("GET request for {}".format(self.path).encode('utf-8'))
 
     def do_POST(self):
         form = cgi.FieldStorage(
@@ -41,7 +38,6 @@ class S(BaseHTTPRequestHandler):
         #        str(self.path), str(self.headers), len(data))
         self._set_response()
         out = json.dumps(detect(ssd, data)).encode('utf-8')
-        print(out)
         self.wfile.write(out)
 
 def run(server_class=HTTPServer, handler_class=S, port=8080):

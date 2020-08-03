@@ -1,3 +1,6 @@
+import os
+from datetime import date,datetime
+import json
 import numpy
 import cv2
 import tensorflow as tf
@@ -11,6 +14,7 @@ from flask import g
 from utils.ssd import TrtSSD
 import pycuda.driver as cuda
 import imageio
+import logging
 
 MODEL='ssd_mobilenet_v1_garbage_bin'
 cls_dict = get_cls_dict()
@@ -66,6 +70,15 @@ def detectit(request):
         o[cls_dict[k]] = v
     return sanitize(o)
 
+def save(image, predictions):
+    detected_objects = predictions.keys()
+    basename = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"), datetime.now().strftime("%H%M%S") + "-" + "gabage_bin" + "-" + "_".join(detected_objects))
+    logging.info('Saving %s',  basename)
+    pimg = Image.fromarray(image)
+    pimg.save(basename + '.jpg')
+    with open(basename + '.txt', 'w') as file:
+        file.write(json.dumps(predictions))
+    
 def detectframe(model):
     #read image file string data
     url = "http://garage.local:8085/?action=snapshot"
@@ -85,4 +98,6 @@ def detectframe(model):
     o={}
     for k,v in maxes.items():
         o[cls_dict[k]] = v
-    return sanitize(o)
+    o = sanitize(o)
+    save(img, o)
+    return o

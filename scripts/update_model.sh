@@ -13,7 +13,8 @@ fi
 if [ $source -nt $dest ]
 then
   cp -pv $source /home/egge/garbage_bin/fine_tuned_model/frozen_inference_graph.pb 
-  python3 ~/tensorrt_demos/ssd/build_engine.py ssd_mobilenet_v1_garbage_bin
+  # must patch graphsurgeon https://github.com/AastaNV/TRT_object_detection
+  /usr/bin/python3 ~/tensorrt_demos/ssd/build_engine.py ssd_mobilenet_v1_garbage_bin
   cp -pv ~/tensorrt_demos/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin $dest
 fi
 echo "Restarting service - sudo required"
