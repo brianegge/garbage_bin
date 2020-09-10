@@ -8,8 +8,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import cgi
 import logging
 from utils.detect import detect,detectframe
-from utils.ssd import TrtSSD
-import pycuda.autoinit
+#from utils.ssd import TrtSSD,TfSSD
+from utils.tfssd import TfSSD
 import json
 
 ssd = None
@@ -54,5 +54,6 @@ def run(server_class=HTTPServer, handler_class=S, port=8080):
 
 if __name__ == '__main__':
     print('loading model')
-    ssd = TrtSSD('ssd_mobilenet_v1_garbage_bin', (300, 300))
+    #ssd = TrtSSD('ssd_mobilenet_v1_garbage_bin', (300, 300))
+    ssd = TfSSD('frozen_inference_graph', (300, 300))
     run(port=5000)

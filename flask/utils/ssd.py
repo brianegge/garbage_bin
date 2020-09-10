@@ -11,6 +11,7 @@ import cv2
 import tensorflow as tf
 import tensorrt as trt
 import pycuda.driver as cuda
+import pycuda.autoinit
 
 
 def _preprocess_trt(img, shape=(300, 300)):
@@ -163,7 +164,7 @@ class TfSSD(object):
     def __del__(self):
         self.sess.close()
 
-    def detect(self, img, conf_th):
+    def detect(self, img, conf_th=0.2):
         img_resized = _preprocess_tf(img, self.input_shape)
         boxes, scores, classes = self.sess.run(
             [self.det_boxes, self.det_scores, self.det_classes],

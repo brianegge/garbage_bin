@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 set -o errexit
 
@@ -8,6 +8,7 @@ cd /home/egge/garbage_bin
 
 if [ ! -e $source ]
 then
+  echo "Maounting Google Drive"
   google-drive-ocamlfuse /home/egge/gdrive
 fi
 if [ $source -nt $dest ]
@@ -16,6 +17,8 @@ then
   # must patch graphsurgeon https://github.com/AastaNV/TRT_object_detection
   /usr/bin/python3 ~/tensorrt_demos/ssd/build_engine.py ssd_mobilenet_v1_garbage_bin
   cp -pv ~/tensorrt_demos/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin $dest
+  echo "Restarting service - sudo required"
+  echo sudo systemctl restart garbage_bin_detector
+else
+  echo "Model is up to date - nothing to do"
 fi
-echo "Restarting service - sudo required"
-echo sudo systemctl restart garbage_bin_detector
