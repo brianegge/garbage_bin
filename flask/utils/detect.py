@@ -72,9 +72,11 @@ def detect(model,request):
 #    return sanitize(o)
 
 def save(image, predictions):
-    predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
-    detected_objects = predictions.keys()
-    basename = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"), datetime.now().strftime("%H%M%S") + "-" + "gabage_bin" + "-" + "_".join(detected_objects))
+    good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
+    detected_objects = good_predictions.keys()
+    pathname = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"))
+    os.makedirs(pathname, exist_ok=True)
+    basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
     logging.info('Saving %s',  basename)
     pimg = Image.fromarray(image)
     pimg.save(basename + '.jpg')
