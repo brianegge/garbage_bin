@@ -2,3 +2,4 @@ garbage bin
 honda civic
 honda crv
 tool bucket
+person
