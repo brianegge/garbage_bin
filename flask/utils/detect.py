@@ -85,13 +85,14 @@ def save(image, predictions):
     
 def detectframe(model):
     #read image file string data
-    url = "http://garage.local:8085/?action=snapshot"
+    url = "http://garage:8085/?action=snapshot"
     img = imageio.imread(url)
     #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
         return ['Error reading image']
     boxes, confs, clss = model.detect(img)
     maxes={}
+    something = numpy.float32(-1.0)
     for i,_ in enumerate(confs):
         conf = confs[i]
         cls = clss[i]
@@ -99,9 +100,11 @@ def detectframe(model):
             maxes[cls] = conf
         if conf > maxes[cls]:
             maxes[cls] = conf
+        something = max(something, conf)
     o={}
     for k,v in maxes.items():
         o[cls_dict[k]] = v.item()
+    o['something'] = something.item()
     o = sanitize(o)
     pprint(o)
     save(img, o)

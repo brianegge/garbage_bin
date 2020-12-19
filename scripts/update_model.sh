@@ -16,8 +16,8 @@ then
   wc -c $source # force gdrive to fetch
   cp -pv $source /home/egge/garbage_bin/fine_tuned_model/frozen_inference_graph.pb 
   # must patch graphsurgeon https://github.com/AastaNV/TRT_object_detection
-  /usr/bin/python3 ~/tensorrt_demos/ssd/build_engine.py ssd_mobilenet_v1_garbage_bin
-  cp -pv ~/tensorrt_demos/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin $dest
+  #/usr/bin/python3 ~/tensorrt_demos/ssd/build_engine.py ssd_mobilenet_v1_garbage_bin
+  #cp -pv ~/tensorrt_demos/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin $dest
   echo "Restarting service - sudo required"
   echo sudo systemctl restart garbage_bin_detector
 else
