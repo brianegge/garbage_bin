@@ -1,5 +1,4 @@
 *.pyc
-annotations/label_map.pbtxt
 annotations/test.record
 annotations/test_labels.csv
 annotations/train.record
