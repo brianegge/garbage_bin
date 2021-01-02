@@ -11,8 +11,8 @@ import cv2
 import tensorflow as tf
 import tensorrt as trt
 import pycuda.driver as cuda
-import pycuda.autoinit
-
+#import pycuda.autoinit
+from PIL import Image
 
 def _preprocess_trt(img, shape=(300, 300)):
     """Preprocess an image before TRT SSD inferencing."""
@@ -160,9 +160,6 @@ class TfSSD(object):
 
         # create the session for inferencing
         self.sess = tf.Session(graph=ssd_graph)
-
-    def __del__(self):
-        self.sess.close()
 
     def detect(self, img, conf_th=0.2):
         img_resized = _preprocess_tf(img, self.input_shape)

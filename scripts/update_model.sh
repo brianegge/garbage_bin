@@ -3,6 +3,7 @@
 set -o errexit
 
 source=/home/egge/gdrive//dev/garbage_bin/frozen_inference_graph.pb
+labels=/home/egge/gdrive//dev/garbage_bin/my-garage_label_map.pbtxt
 dest=flask/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin
 cd /home/egge/garbage_bin
 
@@ -14,7 +15,7 @@ fi
 if [ $source -nt $dest ]
 then
   wc -c $source # force gdrive to fetch
-  cp -pv $source /home/egge/garbage_bin/fine_tuned_model/frozen_inference_graph.pb 
+  cp -pv $source $labels /home/egge/garbage_bin/fine_tuned_model/
   # must patch graphsurgeon https://github.com/AastaNV/TRT_object_detection
   #/usr/bin/python3 ~/tensorrt_demos/ssd/build_engine.py ssd_mobilenet_v1_garbage_bin
   #cp -pv ~/tensorrt_demos/ssd/TRT_ssd_mobilenet_v1_garbage_bin.bin $dest

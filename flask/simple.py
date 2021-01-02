@@ -9,8 +9,9 @@ import cgi
 import logging
 from utils.detect import detect,detectframe
 #from utils.ssd import TrtSSD,TfSSD
-from utils.tfssd import TfSSD
+from utils.ssd2 import TfSSD2
 import json
+from pprint import pprint
 
 ssd = None
 
@@ -36,8 +37,9 @@ class S(BaseHTTPRequestHandler):
         data = form['file'].file.read()
         #logging.info("POST request,\nPath: %s\nHeaders:\n%s\n\nBody size:\n%s\n",
         #        str(self.path), str(self.headers), len(data))
+        img = Image.open(BytesIO(data))
         self._set_response()
-        out = json.dumps(detect(ssd, data)).encode('utf-8')
+        out = json.dumps(detect(ssd, img)).encode('utf-8')
         self.wfile.write(out)
 
 def run(server_class=HTTPServer, handler_class=S, port=8080):
@@ -55,5 +57,7 @@ def run(server_class=HTTPServer, handler_class=S, port=8080):
 if __name__ == '__main__':
     print('loading model')
     #ssd = TrtSSD('ssd_mobilenet_v1_garbage_bin', (300, 300))
-    ssd = TfSSD('frozen_inference_graph', (300, 300))
+    #ssd = TfSSD('frozen_inference_graph', (300, 300))
+    ssd = TfSSD2('frozen_inference_graph', (300, 300))
+    #pprint(json.dumps(detectframe(ssd)).encode('utf-8'))
     run(port=5000)

@@ -15,6 +15,8 @@ from flask import g
 #import pycuda.driver as cuda
 import imageio
 import logging
+import requests
+from io import BytesIO
 from pprint import pprint
 
 MODEL='ssd_mobilenet_v1_garbage_bin'
@@ -73,24 +75,30 @@ def detect(model,request):
 
 def save(image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
-    detected_objects = good_predictions.keys()
+    detected_objects = list(good_predictions.keys())
+    detected_objects = list(filter(lambda x: x != 'something', detected_objects))
     pathname = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"))
     os.makedirs(pathname, exist_ok=True)
     basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
     logging.info('Saving %s',  basename)
-    pimg = Image.fromarray(image)
-    pimg.save(basename + '.jpg')
+    #pimg = Image.fromarray(image)
+    image.save(basename + '.jpg')
     with open(basename + '.txt', 'w') as file:
         file.write(json.dumps(predictions))
     
 def detectframe(model):
     #read image file string data
     url = "http://garage:8085/?action=snapshot"
-    img = imageio.imread(url)
+    #img = imageio.imread(url)
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
     #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
         return ['Error reading image']
-    boxes, confs, clss = model.detect(img)
+    output = model.detect(img)
+    boxes = output['detection_boxes']
+    confs = output['detection_scores']
+    clss = output['detection_classes']
     maxes={}
     something = numpy.float32(-1.0)
     for i,_ in enumerate(confs):
@@ -100,12 +108,13 @@ def detectframe(model):
             maxes[cls] = conf
         if conf > maxes[cls]:
             maxes[cls] = conf
-        something = max(something, conf)
+        if cls_dict[cls] != 'honda civic':
+            something = max(something, conf)
     o={}
     for k,v in maxes.items():
-        o[cls_dict[k]] = v.item()
+        if v.item() > 0.4:
+            o[cls_dict[k]] = v.item()
     o['something'] = something.item()
     o = sanitize(o)
-    pprint(o)
     save(img, o)
     return o
