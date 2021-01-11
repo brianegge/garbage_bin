@@ -10,6 +10,7 @@ import logging
 from utils.detect import detect,detectframe
 #from utils.ssd import TrtSSD,TfSSD
 from utils.ssd2 import TfSSD2
+import sdnotify
 import json
 from pprint import pprint
 
@@ -59,5 +60,9 @@ if __name__ == '__main__':
     #ssd = TrtSSD('ssd_mobilenet_v1_garbage_bin', (300, 300))
     #ssd = TfSSD('frozen_inference_graph', (300, 300))
     ssd = TfSSD2('frozen_inference_graph', (300, 300))
+    # warm up
+    pprint(json.dumps(detectframe(ssd)).encode('utf-8'))
     #pprint(json.dumps(detectframe(ssd)).encode('utf-8'))
+    n = sdnotify.SystemdNotifier()
+    n.notify("READY=1")
     run(port=5000)

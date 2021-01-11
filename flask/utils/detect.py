@@ -2,7 +2,6 @@ import os
 from datetime import date,datetime
 import json
 import numpy
-import cv2
 import tensorflow as tf
 import subprocess
 from collections import defaultdict
@@ -31,7 +30,8 @@ def sanitize(j):
 
 def detect(model,request):
     #read image file string data
-    img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    img = Image.open(BytesIO(resp.content))
     if img is None:
         return ['Error reading image']
     boxes, confs, clss = model.detect(img)
@@ -77,14 +77,15 @@ def save(image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
     detected_objects = list(good_predictions.keys())
     detected_objects = list(filter(lambda x: x != 'something', detected_objects))
-    pathname = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"))
-    os.makedirs(pathname, exist_ok=True)
-    basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
-    logging.info('Saving %s',  basename)
-    #pimg = Image.fromarray(image)
-    image.save(basename + '.jpg')
-    with open(basename + '.txt', 'w') as file:
-        file.write(json.dumps(predictions))
+    if os.path.exists('/mnt/elements'):
+        pathname = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"))
+        os.makedirs(pathname, exist_ok=True)
+        basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
+        logging.info('Saving %s',  basename)
+        #pimg = Image.fromarray(image)
+        image.save(basename + '.jpg')
+        with open(basename + '.txt', 'w') as file:
+            file.write(json.dumps(predictions))
     
 def detectframe(model):
     #read image file string data

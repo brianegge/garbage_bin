@@ -5,9 +5,7 @@ import re
 import ctypes
 
 import numpy as np
-import cv2
 import tensorflow as tf
-import tensorrt as trt
 from PIL import Image
 
 class TfSSD2(object):
