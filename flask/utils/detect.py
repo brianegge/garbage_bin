@@ -15,6 +15,7 @@ from flask import g
 import imageio
 import logging
 import requests
+from requests.auth import HTTPDigestAuth
 from io import BytesIO
 from pprint import pprint
 
@@ -77,21 +78,27 @@ def save(image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
     detected_objects = list(good_predictions.keys())
     detected_objects = list(filter(lambda x: x != 'something', detected_objects))
-    if os.path.exists('/mnt/elements'):
-        pathname = os.path.join('/mnt/elements/capture/', date.today().strftime("%Y%m%d"))
-        os.makedirs(pathname, exist_ok=True)
-        basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
-        logging.info('Saving %s',  basename)
-        #pimg = Image.fromarray(image)
-        image.save(basename + '.jpg')
-        with open(basename + '.txt', 'w') as file:
-            file.write(json.dumps(predictions))
+    for root in ['/home/pi/capture', '/mnt/elements/capture']:
+        if os.path.exists(root):
+            pathname = os.path.join(root, date.today().strftime("%Y%m%d"))
+            os.makedirs(pathname, exist_ok=True)
+            basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
+            logging.info('Saving %s',  basename)
+            #pimg = Image.fromarray(image)
+            image.save(basename + '.jpg')
+            with open(basename + '.txt', 'w') as file:
+                file.write(json.dumps(predictions))
+            break
     
-def detectframe(model):
+def detectframe(model, save_to_file=True):
     #read image file string data
-    url = "http://garage:8085/?action=snapshot"
+    #url = "http://garage:8085/?action=snapshot"
     #img = imageio.imread(url)
-    response = requests.get(url)
+    session = requests.Session()
+    session.auth = HTTPDigestAuth("admin", "Password1")
+    # curl -v --digest --user "admin:Password1"  "http://192.168.254.228/cgi-bin/snapshot.cgi" -o capture/garage.jpg
+    url = "http://192.168.254.228/cgi-bin/snapshot.cgi"
+    response = session.get(url)
     img = Image.open(BytesIO(response.content))
     #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
@@ -117,5 +124,6 @@ def detectframe(model):
             o[cls_dict[k]] = v.item()
     o['something'] = something.item()
     o = sanitize(o)
-    save(img, o)
+    if save_to_file:
+        save(img, o)
     return o

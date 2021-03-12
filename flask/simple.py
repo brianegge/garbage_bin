@@ -61,7 +61,7 @@ if __name__ == '__main__':
     #ssd = TfSSD('frozen_inference_graph', (300, 300))
     ssd = TfSSD2('frozen_inference_graph', (300, 300))
     # warm up
-    pprint(json.dumps(detectframe(ssd)).encode('utf-8'))
+    pprint(detectframe(ssd, save_to_file=False))
     #pprint(json.dumps(detectframe(ssd)).encode('utf-8'))
     n = sdnotify.SystemdNotifier()
     n.notify("READY=1")
