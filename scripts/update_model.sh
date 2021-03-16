@@ -34,3 +34,4 @@ else
 fi
 
 echo sudo systemctl  restart garbage_bin_detector
+echo time curl http://localhost:5000/

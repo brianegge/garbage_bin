@@ -94,6 +94,7 @@ def detectframe(model, save_to_file=True):
     #read image file string data
     #url = "http://garage:8085/?action=snapshot"
     #img = imageio.imread(url)
+    print('Capturing image')
     session = requests.Session()
     session.auth = HTTPDigestAuth("admin", "Password1")
     # curl -v --digest --user "admin:Password1"  "http://192.168.254.228/cgi-bin/snapshot.cgi" -o capture/garage.jpg
@@ -103,6 +104,7 @@ def detectframe(model, save_to_file=True):
     #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
         return ['Error reading image']
+    print('Detecting objects')
     output = model.detect(img)
     boxes = output['detection_boxes']
     confs = output['detection_scores']
@@ -125,5 +127,7 @@ def detectframe(model, save_to_file=True):
     o['something'] = something.item()
     o = sanitize(o)
     if save_to_file:
+        print('Saving image')
         save(img, o)
+    print('Returning {}'.format(o))
     return o
