@@ -19,6 +19,8 @@ from requests.auth import HTTPDigestAuth
 from io import BytesIO
 from pprint import pprint
 
+from threading import Thread
+
 MODEL='ssd_mobilenet_v1_garbage_bin'
 cls_dict = get_cls_dict()
 INPUT_HW = (300, 300)
@@ -128,6 +130,9 @@ def detectframe(model, save_to_file=True):
     o = sanitize(o)
     if save_to_file:
         print('Saving image')
-        save(img, o)
+        thread = Thread(target=save, args=(img, o,))
+        thread.daemon = True
+        thread.start()
+        #save(img, o)
     print('Returning {}'.format(o))
     return o

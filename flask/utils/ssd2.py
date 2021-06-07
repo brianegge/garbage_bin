@@ -44,6 +44,7 @@ class TfSSD2(object):
     def detect(self, image, conf_th=0.2):
         # the array based representation of the image will be used later in order to prepare the
         # result image with boxes and labels on it.
+        print("Resizing")
         image = image.resize( (300,300) )
         image = TfSSD2.load_image_into_numpy_array(image)
         # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
@@ -88,6 +89,7 @@ class TfSSD2(object):
                 image_tensor = tf.get_default_graph().get_tensor_by_name('image_tensor:0')
 
                 # Run inference
+                print("Inferencing")
                 output_dict = sess.run(tensor_dict,
                                        feed_dict={image_tensor: np.expand_dims(image, 0)})
 
@@ -101,4 +103,3 @@ class TfSSD2(object):
                 if 'detection_masks' in output_dict:
                     output_dict['detection_masks'] = output_dict['detection_masks'][0]
         return output_dict
-
