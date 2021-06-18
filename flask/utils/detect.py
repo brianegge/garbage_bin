@@ -80,17 +80,15 @@ def save(image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
     detected_objects = list(good_predictions.keys())
     detected_objects = list(filter(lambda x: x != 'something', detected_objects))
-    for root in ['/home/pi/capture', '/mnt/elements/capture']:
-        if os.path.exists(root):
-            pathname = os.path.join(root, date.today().strftime("%Y%m%d"))
-            os.makedirs(pathname, exist_ok=True)
-            basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
-            logging.info('Saving %s',  basename)
-            #pimg = Image.fromarray(image)
-            image.save(basename + '.jpg')
-            with open(basename + '.txt', 'w') as file:
-                file.write(json.dumps(predictions))
-            break
+    root  = '/mnt/elements/capture'
+    pathname = os.path.join(root, date.today().strftime("%Y%m%d"))
+    os.makedirs(pathname, exist_ok=True)
+    basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
+    logging.info('Saving %s',  basename)
+    #pimg = Image.fromarray(image)
+    image.save(basename + '.jpg')
+    with open(basename + '.txt', 'w') as file:
+        file.write(json.dumps(predictions))
     
 def detectframe(model, save_to_file=True):
     #read image file string data
@@ -136,3 +134,30 @@ def detectframe(model, save_to_file=True):
         #save(img, o)
     print('Returning {}'.format(o))
     return o
+
+def detectframe2(model):
+    session = requests.Session()
+    session.auth = HTTPDigestAuth("admin", "Password1")
+    # curl -v --digest --user "admin:Password1"  "http://192.168.254.228/cgi-bin/snapshot.cgi" -o capture/garage.jpg
+    url = "http://garage-cam.home/cgi-bin/snapshot.cgi"
+    response = session.get(url)
+    img = Image.open(BytesIO(response.content))
+    #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    if img is None:
+        return ['Error reading image']
+    output = model.detect(img)
+    boxes = output['detection_boxes']
+    confs = output['detection_scores']
+    clss = output['detection_classes']
+    maxes={}
+    for i,_ in enumerate(confs):
+        conf = confs[i]
+        cls = clss[i]
+        if not cls in maxes:
+            maxes[cls] = conf
+        if conf > maxes[cls]:
+            maxes[cls] = conf
+    o={}
+    for k,v in maxes.items():
+        o[cls_dict[k]] = v.item()
+    return o, img
