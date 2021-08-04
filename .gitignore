@@ -9,3 +9,4 @@ images/*.jpg
 images/*.png
 images/*.xml
 training/
+flask/config.txt
