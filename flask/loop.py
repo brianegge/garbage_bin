@@ -45,20 +45,38 @@ class Device(object):
 def on_publish(client, userdata, mid):
     print("on_publish({},{})".format(userdata, mid))
 
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect(client, userdata, flags, rc):
+    print("mqtt connected")
+    client.publish('garagecam/status', 'online', retain=True)
+
+def on_disconnect(client, userdata, flags, rc):
+    print("mqtt disconnected reason  "  +str(rc))
+
+def on_message(self, mqtt_client, obj, msg):
+    print("on_message()")
+
 def main():
     config = configparser.ConfigParser()
     config.read('config.txt')
     mqtt_client = paho.Client("garage-cam")
     mqtt_client.on_publish = on_publish
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client.on_message = on_message
     mqtt_client.connect("mqtt.home",1883)
+    mqtt_client.subscribe("test") # get on connect messages
     mqtt_client.loop_start()
     devices = list(map(lambda name: Device(name), ['Honda Civic','Honda CR-V','Garbage Bin']))
+    lwt = 'garagecam/status'
+    mqtt_client.will_set(lwt, 'offline', retain=True)
     for device in devices:
         j = {
              "name":device.name,
              "state_topic":"{}/state".format(device.hass_name),
              "device_class": "presence",
              "uniq_id":"garagecam-{}".format(device.hass_name),
+             'availability_topic': lwt
              }
         mqtt_client.publish("homeassistant/binary_sensor/{}/config".format(device.hass_name), json.dumps(j), retain=True)
         
