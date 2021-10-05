@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 import tensorflow as tf
 
+
 def _preprocess_tf(img, shape=(300, 300)):
     """Preprocess an image before TensorFlow SSD inferencing."""
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -42,16 +43,16 @@ class TfSSD(object):
         ssd_graph = tf.Graph()
         with ssd_graph.as_default():
             graph_def = tf.GraphDef()
-            with tf.gfile.GFile('ssd/%s.pb' % model, 'rb') as fid:
+            with tf.gfile.GFile("ssd/%s.pb" % model, "rb") as fid:
                 serialized_graph = fid.read()
                 graph_def.ParseFromString(serialized_graph)
-                tf.import_graph_def(graph_def, name='')
+                tf.import_graph_def(graph_def, name="")
 
         # define input/output tensors
-        self.image_tensor = ssd_graph.get_tensor_by_name('image_tensor:0')
-        self.det_boxes = ssd_graph.get_tensor_by_name('detection_boxes:0')
-        self.det_scores = ssd_graph.get_tensor_by_name('detection_scores:0')
-        self.det_classes = ssd_graph.get_tensor_by_name('detection_classes:0')
+        self.image_tensor = ssd_graph.get_tensor_by_name("image_tensor:0")
+        self.det_boxes = ssd_graph.get_tensor_by_name("detection_boxes:0")
+        self.det_scores = ssd_graph.get_tensor_by_name("detection_scores:0")
+        self.det_classes = ssd_graph.get_tensor_by_name("detection_classes:0")
 
         # create the session for inferencing
         self.sess = tf.Session(graph=ssd_graph)
@@ -63,5 +64,6 @@ class TfSSD(object):
         img_resized = _preprocess_tf(img, self.input_shape)
         boxes, scores, classes = self.sess.run(
             [self.det_boxes, self.det_scores, self.det_classes],
-            feed_dict={self.image_tensor: np.expand_dims(img_resized, 0)})
+            feed_dict={self.image_tensor: np.expand_dims(img_resized, 0)},
+        )
         return _postprocess_tf(img, boxes, scores, classes, conf_th)

@@ -10,3 +10,7 @@ images/*.png
 images/*.xml
 training/
 flask/config.txt
+pyvenv.cfg
+bin/
+lib/
+share/

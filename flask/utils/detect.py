@@ -1,5 +1,5 @@
 import os
-from datetime import date,datetime
+from datetime import date, datetime
 import json
 import numpy
 import tensorflow as tf
@@ -9,9 +9,10 @@ from io import StringIO
 from PIL import Image
 from utils.ssd_labels import get_cls_dict
 from flask import g
+
 # import pycuda.autoinit  # This is needed for initializing CUDA driver
 # from utils.ssd import TrtSSD
-#import pycuda.driver as cuda
+# import pycuda.driver as cuda
 import imageio
 import logging
 import requests
@@ -21,37 +22,40 @@ from pprint import pprint
 
 from threading import Thread
 
-MODEL='ssd_mobilenet_v1_garbage_bin'
+MODEL = "ssd_mobilenet_v1_garbage_bin"
 cls_dict = get_cls_dict()
 INPUT_HW = (300, 300)
 
+
 def sanitize(j):
-    o={}
-    for k,v in j.items():
-        o[k.replace(' ','_')] = v
+    o = {}
+    for k, v in j.items():
+        o[k.replace(" ", "_")] = v
     return o
 
-def detect(model,request):
-    #read image file string data
-    #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+
+def detect(model, request):
+    # read image file string data
+    # img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     img = Image.open(BytesIO(resp.content))
     if img is None:
-        return ['Error reading image']
+        return ["Error reading image"]
     boxes, confs, clss = model.detect(img)
-    maxes={}
-    for i,_ in enumerate(confs):
+    maxes = {}
+    for i, _ in enumerate(confs):
         conf = confs[i]
         cls = clss[i]
         if not cls in maxes:
             maxes[cls] = conf
         if conf > maxes[cls]:
             maxes[cls] = conf
-    o={}
-    for k,v in maxes.items():
+    o = {}
+    for k, v in maxes.items():
         o[cls_dict[k]] = v.item()
     return sanitize(o)
 
-#def detectit(request):
+
+# def detectit(request):
 #    #read image file string data
 #    img = cv2.imdecode(numpy.fromstring(request.files['file'].read(), numpy.uint8), cv2.IMREAD_UNCHANGED)
 #    print('getting cuda context')
@@ -76,64 +80,80 @@ def detect(model,request):
 #        o[cls_dict[k]] = v
 #    return sanitize(o)
 
+
 def save(image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
     detected_objects = list(good_predictions.keys())
-    detected_objects = list(filter(lambda x: x != 'something', detected_objects))
-    root  = '/mnt/elements/capture'
+    detected_objects = list(filter(lambda x: x != "something", detected_objects))
+    root = "/mnt/elements/capture"
     pathname = os.path.join(root, date.today().strftime("%Y%m%d"))
     os.makedirs(pathname, exist_ok=True)
-    basename = os.path.join(pathname, datetime.now().strftime("%H%M%S") + "-" + "garage_check" + "-" + "_".join(detected_objects))
-    logging.info('Saving %s',  basename)
-    #pimg = Image.fromarray(image)
-    image.save(basename + '.jpg')
-    with open(basename + '.txt', 'w') as file:
+    basename = os.path.join(
+        pathname,
+        datetime.now().strftime("%H%M%S")
+        + "-"
+        + "garage_check"
+        + "-"
+        + "_".join(detected_objects),
+    )
+    logging.info("Saving %s", basename)
+    # pimg = Image.fromarray(image)
+    image.save(basename + ".jpg")
+    with open(basename + ".txt", "w") as file:
         file.write(json.dumps(predictions))
-    
+
+
 def detectframe(model, save_to_file=True):
-    #read image file string data
-    #url = "http://garage:8085/?action=snapshot"
-    #img = imageio.imread(url)
-    print('Capturing image')
+    # read image file string data
+    # url = "http://garage:8085/?action=snapshot"
+    # img = imageio.imread(url)
+    print("Capturing image")
     session = requests.Session()
     session.auth = HTTPDigestAuth("admin", "Password1")
     # curl -v --digest --user "admin:Password1"  "http://192.168.254.228/cgi-bin/snapshot.cgi" -o capture/garage.jpg
     url = "http://192.168.254.228/cgi-bin/snapshot.cgi"
     response = session.get(url)
     img = Image.open(BytesIO(response.content))
-    #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    # img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
-        return ['Error reading image']
-    print('Detecting objects')
+        return ["Error reading image"]
+    print("Detecting objects")
     output = model.detect(img)
-    boxes = output['detection_boxes']
-    confs = output['detection_scores']
-    clss = output['detection_classes']
-    maxes={}
+    boxes = output["detection_boxes"]
+    confs = output["detection_scores"]
+    clss = output["detection_classes"]
+    maxes = {}
     something = numpy.float32(-1.0)
-    for i,_ in enumerate(confs):
+    for i, _ in enumerate(confs):
         conf = confs[i]
         cls = clss[i]
         if not cls in maxes:
             maxes[cls] = conf
         if conf > maxes[cls]:
             maxes[cls] = conf
-        if cls_dict[cls] != 'honda civic':
+        if cls_dict[cls] != "honda civic":
             something = max(something, conf)
-    o={}
-    for k,v in maxes.items():
+    o = {}
+    for k, v in maxes.items():
         if v.item() > 0.4:
             o[cls_dict[k]] = v.item()
-    o['something'] = something.item()
+    o["something"] = something.item()
     o = sanitize(o)
     if save_to_file:
-        print('Saving image')
-        thread = Thread(target=save, args=(img, o,))
+        print("Saving image")
+        thread = Thread(
+            target=save,
+            args=(
+                img,
+                o,
+            ),
+        )
         thread.daemon = True
         thread.start()
-        #save(img, o)
-    print('Returning {}'.format(o))
+        # save(img, o)
+    print("Returning {}".format(o))
     return o
+
 
 def detectframe2(model):
     session = requests.Session()
@@ -142,22 +162,22 @@ def detectframe2(model):
     url = "http://garage-cam.home/cgi-bin/snapshot.cgi"
     response = session.get(url)
     img = Image.open(BytesIO(response.content))
-    #img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
+    # img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
-        return ['Error reading image']
+        return ["Error reading image"]
     output = model.detect(img)
-    boxes = output['detection_boxes']
-    confs = output['detection_scores']
-    clss = output['detection_classes']
-    maxes={}
-    for i,_ in enumerate(confs):
+    boxes = output["detection_boxes"]
+    confs = output["detection_scores"]
+    clss = output["detection_classes"]
+    maxes = {}
+    for i, _ in enumerate(confs):
         conf = confs[i]
         cls = clss[i]
         if not cls in maxes:
             maxes[cls] = conf
         if conf > maxes[cls]:
             maxes[cls] = conf
-    o={}
-    for k,v in maxes.items():
+    o = {}
+    for k, v in maxes.items():
         o[cls_dict[k]] = v.item()
     return o, img
