@@ -2,7 +2,9 @@
 """
   monitor garage camera in loop
 """
+import sys
 import logging
+from systemd import journal
 from utils.detect import detectframe2,sanitize,save
 from utils.ssd2 import TfSSD2
 import sdnotify
@@ -13,6 +15,9 @@ from pprint import pprint
 from PIL import UnidentifiedImageError
 import paho.mqtt.client as paho
 
+log = logging.getLogger('loop')
+log.addHandler(journal.JournaldLogHandler())
+log.setLevel(logging.DEBUG)
 
 ssd = None
 
@@ -31,35 +36,37 @@ class Device(object):
         old_value = self.value
         self.value = old_value * 0.7 + value * 0.3
         if self.value < 0.6 and self.status != 'off':
-            print("{} departed {:.3f}+{:.3f}=>{:.3f}".format(self.name, value, old_value, self.value), end=" ")
+            log.info("{} departed {:.3f}+{:.3f}=>{:.3f}".format(self.name, value, old_value, self.value))
             self.status = 'off'
             return 'off'
         elif self.value > 0.9 and self.status != 'on':
-            print("{} arrived {:.3f}+{:.3f}=>{:.3f}".format(self.name, value, old_value, self.value), end=" ")
+            log.info("{} arrived {:.3f}+{:.3f}=>{:.3f}".format(self.name, value, old_value, self.value))
             self.status = 'on'
             return 'on'
-        else:
-            print("{} updated {:.3f}+{:.3f}=>{:.3f}".format(self.name, value, old_value, self.value), end=" ")
-            return None
+        elif abs(self.value - old_value) > 0.0005:
+            log.info("{} updated {:.3f}+{:.3f}=>{:.3f}".format(self.name, value, old_value, self.value))
+        return None
 
 def on_publish(client, userdata, mid):
-    print("on_publish({},{})".format(userdata, mid))
+    log.info("on_publish({},{})".format(userdata, mid))
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
-    print("mqtt connected")
+    log.info("mqtt connected")
     client.publish('garagecam/status', 'online', retain=True)
 
-def on_disconnect(client, userdata, flags, rc):
-    print("mqtt disconnected reason  "  +str(rc))
+def on_disconnect(client, userdata, rc):
+    log.info("mqtt disconnected reason  "  +str(rc))
+    sys.exit("Exiting to restart with a clean connection")
 
 def on_message(self, mqtt_client, obj, msg):
-    print("on_message()")
+    log.info("on_message()")
 
 def main():
     config = configparser.ConfigParser()
     config.read('config.txt')
     mqtt_client = paho.Client("garage-cam")
+    mqtt_client.enable_logger(logger=log)
     mqtt_client.on_publish = on_publish
     mqtt_client.on_connect = on_connect
     mqtt_client.on_disconnect = on_disconnect
@@ -87,10 +94,10 @@ def main():
             objects, img = detectframe2(ssd)
             #pprint(objects)
             if 'person' in objects and float(objects['person']) > 0.6:
-                print("Skipping while person is in garage")
+                log.info("Skipping while person is in garage")
                 continue
             if max(objects.values()) < 0.1:
-                print("Skipping because nothing is in garage")
+                log.info("Skipping because nothing is in garage")
                 continue
             for device in devices:
                 command = None
@@ -106,7 +113,7 @@ def main():
                     #elif command == 'off':
                     #    command = 'not_present'
                     mqtt_client.publish("{}/state".format(device.hass_name), command.upper(), retain=True)
-            print() # end line as above loop doesn't publish one
+            #print() # end line as above loop doesn't publish one
             delay = 15.0 - (time.time() - start)
             if delay > 0.0:
                 #mqtt_client.loop(delay)
@@ -117,7 +124,7 @@ def main():
             break
 
 if __name__ == '__main__':
-    print('loading model')
+    log.info('loading model')
     ssd = TfSSD2('frozen_inference_graph', (300, 300))
     # warm up
     #pprint(detectframe2(ssd))
