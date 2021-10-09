@@ -16,11 +16,13 @@ from PIL import UnidentifiedImageError
 import paho.mqtt.client as paho
 
 log = logging.getLogger("loop")
+log.propagate = False
 log.addHandler(journal.JournaldLogHandler())
 log.setLevel(logging.DEBUG)
 
 ssd = None
 
+running = True
 
 class Device(object):
     """
@@ -74,7 +76,7 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     log.info("mqtt disconnected reason  " + str(rc))
-    sys.exit("Exiting to restart with a clean connection")
+    running = False
 
 
 def on_message(self, mqtt_client, obj, msg):
@@ -113,7 +115,7 @@ def main():
         )
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
-    while True:
+    while running:
         try:
             start = time.time()
             objects, img = detectframe2(ssd)
@@ -151,6 +153,7 @@ def main():
             pass
         except KeyboardInterrupt:
             break
+     log.info("Gracefully exiting")
 
 
 if __name__ == "__main__":
