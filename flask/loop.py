@@ -16,13 +16,14 @@ from PIL import UnidentifiedImageError
 import paho.mqtt.client as paho
 
 log = logging.getLogger("loop")
-log.propagate = False
 log.addHandler(journal.JournaldLogHandler())
 log.setLevel(logging.DEBUG)
+log.propagate = False
 
 ssd = None
 
 running = True
+
 
 class Device(object):
     """
@@ -76,6 +77,7 @@ def on_connect(client, userdata, flags, rc):
 
 def on_disconnect(client, userdata, rc):
     log.info("mqtt disconnected reason  " + str(rc))
+    global running
     running = False
 
 
@@ -153,7 +155,7 @@ def main():
             pass
         except KeyboardInterrupt:
             break
-     log.info("Gracefully exiting")
+    log.info("Gracefully exiting")
 
 
 if __name__ == "__main__":
