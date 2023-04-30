@@ -2,3 +2,7 @@ pillow
 flask
 imageio
 sdnotify
+paho-mqtt
+systemd
+requests
+tensorflow

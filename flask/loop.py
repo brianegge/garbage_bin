@@ -2,18 +2,21 @@
 """
   monitor garage camera in loop
 """
-import sys
+import configparser
+import json
 import logging
+import signal
+import sys
+import time
+from pprint import pprint
+
+import paho.mqtt.client as paho
+import sdnotify
+from PIL import UnidentifiedImageError
 from systemd import journal
+
 from utils.detect import detectframe2, sanitize, save
 from utils.ssd2 import TfSSD2
-import sdnotify
-import json
-import time
-import configparser
-from pprint import pprint
-from PIL import UnidentifiedImageError
-import paho.mqtt.client as paho
 
 log = logging.getLogger("loop")
 log.addHandler(journal.JournaldLogHandler())
@@ -65,6 +68,17 @@ class Device(object):
         return None
 
 
+class GracefulKiller:
+    kill_now = False
+
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, *args):
+        self.kill_now = True
+
+
 def on_publish(client, userdata, mid):
     log.info("on_publish({},{})".format(userdata, mid))
 
@@ -86,9 +100,14 @@ def on_message(self, mqtt_client, obj, msg):
 
 
 def main():
+    sd = sdnotify.SystemdNotifier()
+    sd.notify("STATUS=Loading")
+    ssd = TfSSD2("frozen_inference_graph", (300, 300))
     config = configparser.ConfigParser()
     config.read("config.txt")
+    lwt = "garagecam/status"
     mqtt_client = paho.Client("garage-cam")
+    mqtt_client.will_set(lwt, "offline", retain=True)
     mqtt_client.enable_logger(logger=log)
     mqtt_client.on_publish = on_publish
     mqtt_client.on_connect = on_connect
@@ -100,8 +119,6 @@ def main():
     devices = list(
         map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"])
     )
-    lwt = "garagecam/status"
-    mqtt_client.will_set(lwt, "offline", retain=True)
     for device in devices:
         j = {
             "name": device.name,
@@ -117,17 +134,21 @@ def main():
         )
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
-    while running:
+    sd.notify("READY=1")
+    sd.notify("STATUS=Running")
+    killer = GracefulKiller()
+    while running and not killer.kill_now:
         try:
             start = time.time()
             objects, img = detectframe2(ssd)
+            sd.notify("WATCHDOG=1")
             # pprint(objects)
             if "person" in objects and float(objects["person"]) > 0.6:
                 log.info("Skipping while person is in garage")
                 continue
             if max(objects.values()) < 0.1:
-                log.info("Skipping because nothing is in garage")
-                continue
+                log.info("Nothing is in garage")
+                # continue
             for device in devices:
                 command = None
                 if device.ssd_name in objects:
@@ -155,15 +176,13 @@ def main():
             pass
         except KeyboardInterrupt:
             break
+    mqtt_client.disconnect()  # disconnect gracefully
+    mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
 
 
 if __name__ == "__main__":
-    log.info("loading model")
-    ssd = TfSSD2("frozen_inference_graph", (300, 300))
     # warm up
     # pprint(detectframe2(ssd))
     # pprint(json.dumps(detectframe(ssd)).encode('utf-8'))
-    n = sdnotify.SystemdNotifier()
-    n.notify("READY=1")
     main()

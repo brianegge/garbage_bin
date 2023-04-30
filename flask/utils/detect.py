@@ -1,26 +1,25 @@
-import os
-from datetime import date, datetime
 import json
-import numpy
-import tensorflow as tf
+import logging
+import os
 import subprocess
 from collections import defaultdict
-from io import StringIO
-from PIL import Image
-from utils.ssd_labels import get_cls_dict
-from flask import g
+from datetime import date, datetime
+from io import BytesIO, StringIO
+from pprint import pprint
+from threading import Thread
 
 # import pycuda.autoinit  # This is needed for initializing CUDA driver
 # from utils.ssd import TrtSSD
 # import pycuda.driver as cuda
 import imageio
-import logging
+import numpy
 import requests
+import tensorflow as tf
+from PIL import Image
 from requests.auth import HTTPDigestAuth
-from io import BytesIO
-from pprint import pprint
 
-from threading import Thread
+from flask import g
+from utils.ssd_labels import get_cls_dict
 
 MODEL = "ssd_mobilenet_v1_garbage_bin"
 cls_dict = get_cls_dict()
