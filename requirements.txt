@@ -3,6 +3,6 @@ flask
 imageio
 sdnotify
 paho-mqtt
-systemd
 requests
+systemd-python
 tensorflow
