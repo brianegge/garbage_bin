@@ -1,5 +1,13 @@
 To label more images
 
+*Linux Install*
+```
+sudo apt install libsystemd-dev
+python3 -m venv .
+. bin/activate
+pip install -r requirements.txt
+```
+
 *MacOS install*
 ```
 git clone https://github.com/tzutalin/labelImg.git

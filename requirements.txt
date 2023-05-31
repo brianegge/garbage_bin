@@ -2,3 +2,5 @@ pillow
 flask
 imageio
 sdnotify
+systemd-python
+tensorflow
