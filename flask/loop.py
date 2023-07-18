@@ -18,10 +18,11 @@ from systemd import journal
 from utils.detect import detectframe2, sanitize, save
 from utils.ssd2 import TfSSD2
 
-log = logging.getLogger("loop")
-log.addHandler(journal.JournaldLogHandler())
-log.setLevel(logging.DEBUG)
-log.propagate = False
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+log = logging.getLogger()
+# log.addHandler(journal.JournalHandler())
+# log.setLevel(logging.DEBUG)
+# log.propagate = False
 
 ssd = None
 
