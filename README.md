@@ -45,6 +45,8 @@ host=garage-cam.home
 host=mqtt
 port=1883
 ```
+In HomeAssistant I have a dashboard showing my garage (along with a camera view)
+<img width="512" alt="image" src="https://github.com/brianegge/garbage_bin/assets/175930/08ace11b-cb6f-429e-a0fd-e13706393528">
 
 Here is one of my automations, which closes my garage door after I leave:
 ```
