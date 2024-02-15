@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """
   monitor garage camera in loop
 """
@@ -20,9 +20,6 @@ from ultralytics import YOLO
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
-# log.addHandler(journal.JournalHandler())
-# log.setLevel(logging.DEBUG)
-# log.propagate = False
 
 model = None
 
@@ -141,7 +138,7 @@ def main():
     while running and not killer.kill_now:
         try:
             start = time.time()
-            objects, img = detectframe(model)
+            objects, img = detectframe(model, config["camera"])
             sd.notify("WATCHDOG=1")
             if "person" in objects and objects["person"] > 0.6:
                 log.info("Skipping while person is in garage")
@@ -156,12 +153,7 @@ def main():
                 else:
                     command = device.update(0.0)
                 if not command is None:
-                    # st.set_switch_value(device.name,command)
-                    save(img, sanitize(objects))
-                    # if command == 'on':
-                    #    command = 'present'
-                    # elif command == 'off':
-                    #    command = 'not_present'
+                    save(config["path"}, img, sanitize(objects))
                     mqtt_client.publish(
                         "{}/state".format(device.hass_name),
                         command.upper(),
@@ -169,7 +161,6 @@ def main():
                     )
             delay = 15.0 - (time.time() - start)
             if delay > 0.0:
-                # mqtt_client.loop(delay)
                 time.sleep(delay)
         except UnidentifiedImageError:
             pass

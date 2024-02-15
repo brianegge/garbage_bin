@@ -1,1 +1,0 @@
-../../fine_tuned_model/frozen_inference_graph.pb

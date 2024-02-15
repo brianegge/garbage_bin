@@ -22,7 +22,7 @@ def sanitize(j):
         o[k.replace(" ", "_")] = v
     return o
 
-def save(image, predictions):
+def save(path, image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
     detected_objects = list(good_predictions.keys())
     detected_objects = list(filter(lambda x: x != "something", detected_objects))
@@ -43,14 +43,14 @@ def save(image, predictions):
     with open(basename + ".txt", "w") as file:
         file.write(json.dumps(predictions))
 
-def detectframe(model):
+def detectframe(model, camera):
     # read image file string data
     # url = "http://garage:8085/?action=snapshot"
     # img = imageio.imread(url)
     session = requests.Session()
-    session.auth = HTTPDigestAuth("admin", "Password1")
+    session.auth = HTTPDigestAuth(camera["user"], camera["password"])
     # curl -v --digest --user "admin:Password1"  "http://garage-cam.home/cgi-bin/snapshot.cgi" -o capture/garage.jpg
-    url = "http://garage-cam.home/cgi-bin/snapshot.cgi"
+    url = f"http://{camera['host']}/cgi-bin/snapshot.cgi"
     response = session.get(url)
     img = Image.open(BytesIO(response.content))
     # img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
