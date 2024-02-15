@@ -11,11 +11,15 @@ item {
     name: 'garbage bin'
 }
 """
-counter=1
+counter = 1
 for label in fileinput.input():
-    print("""item {{
+    print(
+        """item {{
     id: {}
     name: '{}'
 }}
-""".format(counter,label.rstrip()))
+""".format(
+            counter, label.rstrip()
+        )
+    )
     counter += 1

@@ -1,3 +1,4 @@
+ultralytics==8.0.20
 pillow
 flask
 imageio
@@ -5,4 +6,3 @@ sdnotify
 paho-mqtt
 requests
 systemd-python
-tensorflow
