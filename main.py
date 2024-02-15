@@ -153,7 +153,7 @@ def main():
                 else:
                     command = device.update(0.0)
                 if not command is None:
-                    save(config["path"}, img, sanitize(objects))
+                    save(config["file"]["path"], img, sanitize(objects))
                     mqtt_client.publish(
                         "{}/state".format(device.hass_name),
                         command.upper(),
