@@ -47,6 +47,7 @@ port=1883
 ```
 
 Here is one of my automations, which closes my garage door after I leave:
+```
 alias: Garage Close Civic departs
 description: "Close left garage door after departure "
 trigger:
