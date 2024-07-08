@@ -103,6 +103,7 @@ def main():
     model = YOLO("best.pt")  # pretrained YOLOv8n model
     config = configparser.ConfigParser()
     config.read("config.txt")
+    mqtt_config = config["mqtt"]
     lwt = "garagecam/status"
     mqtt_client = paho.Client("garage-cam")
     mqtt_client.will_set(lwt, "offline", retain=True)
@@ -111,7 +112,8 @@ def main():
     mqtt_client.on_connect = on_connect
     mqtt_client.on_disconnect = on_disconnect
     mqtt_client.on_message = on_message
-    mqtt_client.connect("mqtt.home", 1883)
+    mqtt_client.username_pw_set(mqtt_config["user"], mqtt_config["password"])
+    mqtt_client.connect(mqtt_config["host"], int(mqtt_config["port"]))
     mqtt_client.subscribe("test")  # get on connect messages
     mqtt_client.loop_start()
     devices = list(

@@ -26,8 +26,7 @@ def save(path, image, predictions):
     good_predictions = dict(filter(lambda elem: elem[1] > 0.8, predictions.items()))
     detected_objects = list(good_predictions.keys())
     detected_objects = list(filter(lambda x: x != "something", detected_objects))
-    root = "/mnt/elements/capture"
-    pathname = os.path.join(root, date.today().strftime("%Y%m%d"))
+    pathname = os.path.join(path, date.today().strftime("%Y%m%d"))
     os.makedirs(pathname, exist_ok=True)
     basename = os.path.join(
         pathname,
