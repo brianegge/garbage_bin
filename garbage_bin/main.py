@@ -10,12 +10,11 @@ import sys
 import time
 
 import paho.mqtt.client as paho
-
 import sdnotify
 from PIL import UnidentifiedImageError
 
-from garbage_bin.detect import detectframe, get_image, sanitize, save
 from garbage_bin.device import Device
+from garbage_bin.detect import detectframe, sanitize, save
 from ultralytics import YOLO
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -37,23 +36,23 @@ class GracefulKiller:
         self.kill_now = True
 
 
-def on_publish(client, userdata, mid, reason_codes, properties):
+def on_publish(client, userdata, mid):
     log.info("on_publish({},{})".format(userdata, mid))
 
 
 # The callback for when the client receives a CONNACK response from the server.
-def on_connect(client, userdata, flags, reason_code, properties):
-    log.info(f"mqtt connected: {reason_code}")
+def on_connect(client, userdata, flags, rc):
+    log.info("mqtt connected")
     client.publish("garagecam/status", "online", retain=True)
 
 
-def on_disconnect(client, userdata, flags, reason_code, properties):
-    log.info(f"mqtt disconnected reason: {reason_code}")
+def on_disconnect(client, userdata, rc):
+    log.info("mqtt disconnected reason  " + str(rc))
     global running
     running = False
 
 
-def on_message(mqtt_client, obj, msg):
+def on_message(self, mqtt_client, obj, msg):
     log.info("on_message()")
 
 
@@ -65,7 +64,7 @@ def main():
     config.read("config.txt")
     mqtt_config = config["mqtt"]
     lwt = "garagecam/status"
-    mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam")
+    mqtt_client = paho.Client("garage-cam")
     mqtt_client.will_set(lwt, "offline", retain=True)
     mqtt_client.enable_logger(logger=log)
     mqtt_client.on_publish = on_publish
@@ -100,7 +99,7 @@ def main():
     while running and not killer.kill_now:
         try:
             start = time.time()
-            objects, img = detectframe(model, get_image(config["camera"]))
+            objects, img = detectframe(model, config["camera"])
             sd.notify("WATCHDOG=1")
             if "person" in objects and objects["person"] > 0.6:
                 log.info("Skipping while person is in garage")

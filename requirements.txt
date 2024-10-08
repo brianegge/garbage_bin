@@ -1,7 +1,0 @@
-ultralytics==8.3.5
-pillow
-imageio
-sdnotify
-paho-mqtt
-requests
-systemd-python
