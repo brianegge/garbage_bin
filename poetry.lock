@@ -1685,7 +1685,7 @@ dev = ["hypothesis (>=6.70.0)", "pytest (>=7.1.0)"]
 name = "systemd-python"
 version = "235"
 description = "Python interface for libsystemd"
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "systemd-python-235.tar.gz", hash = "sha256:4e57f39797fd5d9e2d22b8806a252d7c0106c936039d1e71c8c6b8008e695c0a"},

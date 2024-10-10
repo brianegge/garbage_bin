@@ -85,4 +85,4 @@ action:
         url: /lovelace-mobile/garage/
 mode: single
 ```
-The arriving home automations are a bit more complicated, because I might be driving either car. If both cars are away, I'm driving the Civic. If the Civic is present, I'm driving the CRV. 
+The arriving home automations are a bit more complicated, because I might be driving either car. If both cars are away, I'm driving the Civic. If the Civic is present, I'm driving the CRV.

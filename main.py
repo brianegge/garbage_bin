@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-  monitor garage camera in loop
+monitor garage camera in loop
 """
+
 import configparser
 import json
 import logging
