@@ -1685,7 +1685,7 @@ dev = ["hypothesis (>=6.70.0)", "pytest (>=7.1.0)"]
 name = "systemd-python"
 version = "235"
 description = "Python interface for libsystemd"
-optional = true
+optional = false
 python-versions = "*"
 files = [
     {file = "systemd-python-235.tar.gz", hash = "sha256:4e57f39797fd5d9e2d22b8806a252d7c0106c936039d1e71c8c6b8008e695c0a"},
@@ -1860,13 +1860,13 @@ files = [
 
 [[package]]
 name = "ultralytics"
-version = "8.3.8"
+version = "8.3.10"
 description = "Ultralytics YOLO for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "ultralytics-8.3.8-py3-none-any.whl", hash = "sha256:b957b98e1789c5586838f41ead748496ba75eac3ba4b839619eab94bc13af36d"},
-    {file = "ultralytics-8.3.8.tar.gz", hash = "sha256:acbd1a53ad349a9b44e46e332ae627939e8792a0bf7c1d57fdc5d515a90e2bd6"},
+    {file = "ultralytics-8.3.10-py3-none-any.whl", hash = "sha256:00a2c7cbde3c342acf1c0719474bd092d166fc4d3d21fdc2b3f7e5a3eb4db884"},
+    {file = "ultralytics-8.3.10.tar.gz", hash = "sha256:db7a11484127a87102de1e515a91c6e5a5dd3c3696cdb5acb515556271e14eae"},
 ]
 
 [package.dependencies]
@@ -1951,4 +1951,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "c8c555d0b8bb079f9507c7e1b0a4fcec04351fd5d87136c6ea8d9c49cce79673"
+content-hash = "abcc87928331ada8649ac8851d2606ed1ba544f0fb1be650f012104a368d70d7"
