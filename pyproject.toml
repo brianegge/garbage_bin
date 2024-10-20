@@ -8,7 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.10"
 ultralytics = "8.3.17"
-pillow = "^10.4.0"
+pillow = "^11.0.0"
 imageio = "^2.35.1"
 sdnotify = "^0.3.2"
 paho-mqtt = "^2.1.0"
