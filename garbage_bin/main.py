@@ -18,6 +18,8 @@ from garbage_bin.device import Device
 from garbage_bin.detect import detectframe, sanitize, save
 from ultralytics import YOLO
 
+import faulthandler
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
 
@@ -32,9 +34,14 @@ class GracefulKiller:
     def __init__(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
+        signal.signal(signal.SIGABRT, self.handle_sigabrt)
 
     def exit_gracefully(self, *args):
         self.kill_now = True
+
+    def handle_sigabrt(signum, frame):
+        print("SIGABRT received")
+        faulthandler.dump_traceback()
 
 
 def on_publish(client, userdata, mid):
