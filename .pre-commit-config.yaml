@@ -9,10 +9,10 @@ repos:
     rev: '1.5.1'
     hooks:
       - id: poetry-check
-  - repo: https://github.com/renovatebot/pre-commit-hooks
-    rev: 38.115.0
-    hooks:
-      - id: renovate-config-validator
+  # - repo: https://github.com/renovatebot/pre-commit-hooks
+  #   rev: 38.115.0
+  #   hooks:
+  #     - id: renovate-config-validator
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.4.2
