@@ -1,3 +1,8 @@
+[build-system]
+# Should be the same as `$POETRY_VERSION`:
+requires = ["poetry-core>=1.6"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "garbage-bin"
 version = "0.1.0"
@@ -24,10 +29,9 @@ pre-commit = "^4.0.1"
 pytest = "^8.3.3"
 black = "^24.10.0"
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
 [tool.pytest.ini_options]
 python_files = "*_test.py"
 testpaths = ["tests"]
+
+[tool.pyright]
+include = ["garbage_bin", "tests"]
