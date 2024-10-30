@@ -1,17 +1,27 @@
 {
     "name": "${localWorkspaceFolderBasename}",
     "build": {
-        "dockerfile": "Dockerfile"
+        "dockerfile": "Dockerfile",
+        "context": "..",
+        "args": {}
     },
-    "postCreateCommand": "poetry install", // this line is problematc
     "customizations": {
         "vscode": {
             "extensions": [
                 "ms-python.python",
+                "ms-python.vscode-pylance",
                 "njpwerner.autodocstring",
                 "tamasfe.even-better-toml",
                 "ms-azuretools.vscode-docker"
             ]
         }
+    },
+    //"postCreateCommand": "poetry install", // this line is problematc
+    //  Podman stuff
+    "runArgs": ["--userns=keep-id"],
+    "containerUser": "vscode",
+    "updateRemoteUserUID": true,
+    "containerEnv": {
+      "HOME": "/home/vscode"
     }
 }
