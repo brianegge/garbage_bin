@@ -15,10 +15,10 @@ def test_device():
     assert d.status == "on"
     assert d.value == 0.6313999999999999
 
-    d.update(0) == "off"
+    assert d.update(0) == "off"
     assert d.status == "off"
     assert d.value == 0.4419799999999999
 
-    d.update(0) is None
+    assert d.update(0) is None
     assert d.status == "off"
     assert d.value == 0.3093859999999999

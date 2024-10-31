@@ -33,5 +33,22 @@ black = "^24.10.0"
 python_files = "*_test.py"
 testpaths = ["tests"]
 
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["E203", "E501"]
+
 [tool.pyright]
 include = ["garbage_bin", "tests"]

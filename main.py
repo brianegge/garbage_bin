@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-monitor garage camera in loop
-"""
+"""monitor garage camera in loop"""
 
 import configparser
 import json
@@ -11,13 +9,12 @@ import sys
 import time
 
 import paho.mqtt.client as paho
-
 import sdnotify
 from PIL import UnidentifiedImageError
+from ultralytics import YOLO
 
 from garbage_bin.detect import detectframe, get_image, sanitize, save
 from garbage_bin.device import Device
-from ultralytics import YOLO
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
@@ -39,7 +36,7 @@ class GracefulKiller:
 
 
 def on_publish(client, userdata, mid, reason_codes, properties):
-    log.info("on_publish({},{})".format(userdata, mid))
+    log.info(f"on_publish({userdata},{mid})")
 
 
 # The callback for when the client receives a CONNACK response from the server.
@@ -78,18 +75,18 @@ def main():
     mqtt_client.subscribe("test")  # get on connect messages
     mqtt_client.loop_start()
     devices = list(
-        map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"])
+        map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
     )
     for device in devices:
         j = {
             "name": device.name,
-            "state_topic": "{}/state".format(device.hass_name),
+            "state_topic": f"{device.hass_name}/state",
             "device_class": "presence",
-            "uniq_id": "garagecam-{}".format(device.hass_name),
+            "uniq_id": f"garagecam-{device.hass_name}",
             "availability_topic": lwt,
         }
         mqtt_client.publish(
-            "homeassistant/binary_sensor/{}/config".format(device.hass_name),
+            f"homeassistant/binary_sensor/{device.hass_name}/config",
             json.dumps(j),
             retain=True,
         )
@@ -118,7 +115,7 @@ def main():
                 if command is not None:
                     save(config["file"]["path"], img, sanitize(objects))
                     mqtt_client.publish(
-                        "{}/state".format(device.hass_name),
+                        f"{device.hass_name}/state",
                         command.upper(),
                         retain=True,
                     )

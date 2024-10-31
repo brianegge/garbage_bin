@@ -68,8 +68,7 @@ def detectframe(model, img):
         cls = model.names.get(box.cls.item())
         if cls not in maxes:
             maxes[cls] = conf
-        if conf > maxes[cls]:
-            maxes[cls] = conf
+        maxes[cls] = max(conf, maxes[cls])
         if cls != "honda civic":
             something = max(something, conf)
     o = dict(filter(lambda item: item[1] > 0.4, maxes.items()))
