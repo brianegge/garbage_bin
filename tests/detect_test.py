@@ -1,8 +1,9 @@
 import os
-from garbage_bin.detect import detectframe
-from garbage_bin.detect import sanitize
-from ultralytics import YOLO
+
 from PIL import Image
+from ultralytics import YOLO
+
+from garbage_bin.detect import detectframe, sanitize
 
 
 def test_sanitize():
