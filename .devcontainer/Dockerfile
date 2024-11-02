@@ -13,7 +13,7 @@ COPY pyproject.toml poetry.lock /workspace/
 # ENV PYENV_ROOT="${HOME}/.pyenv"
 # ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:$PATH"
 RUN echo "Acquire::Check-Valid-Until \"false\";\nAcquire::Check-Date \"false\";" | cat > /etc/apt/apt.conf.d/10no--check-valid-until
-RUN apt-get update && apt-get install -y ack systemd libsystemd-dev
+RUN apt-get update && apt-get install -y ack systemd libsystemd-dev libgl1
 RUN pipx install pre-commit
 
 # RUN echo "done 0" \
@@ -25,7 +25,7 @@ RUN pipx install pre-commit
 #     && echo "done 3" \
 ENV PATH="/home/.local/bin:${PATH}"
 RUN curl -sSL https://install.python-poetry.org | python3
-RUN poetry install $(test "$YOUR_ENV" == production && echo "--only=main") --no-interaction --no-root
-    # && poetry config virtualenvs.in-project true \
+RUN poetry install --no-interaction --no-root \
+     && poetry config virtualenvs.in-project true
     # && poetry config virtualenvs.create false \
     # && poetry config virtualenvs.prefer-active-python true
