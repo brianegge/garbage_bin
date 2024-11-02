@@ -1,11 +1,11 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/brianegge/garbage_bin/badge)](https://scorecard.dev/viewer/?uri=github.com/brianegge/garbage_bin)
+[![Coverage Status](https://coveralls.io/repos/github/brianegge/garbage_bin/badge.png?branch=master)](https://coveralls.io/github/brianegge/garbage_bin?branch=master)
 
 This project is to detect which cars are in my garage as well as if the garbage bins are present. I use a simple object detection model along with an IP Camera in my garage. I publish the state as bianry sensors for use in HomeAssistant. The images used for training are here: https://app.roboflow.com/egge-public/garage/overview
 
 The script uses a rolling average to determine if the object is present or absent, and also skips updating if it detects a person, as they may be obscuring something. I also trained it to recongize my toolbucket. This is a sort of sanity / calibration check. If it finds nothing in the scene, it's likely a system problem, so it shouldn't update the state of the objects.
 
 <img width="779" alt="image" src="https://github.com/brianegge/garbage_bin/assets/175930/ee8b9e05-b508-479b-9ac7-670228d3a32f">
-
 
 *Linux Install*
 ```

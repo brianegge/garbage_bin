@@ -16,3 +16,6 @@ lib/
 share/
 lib64
 config.txt
+
+coverage.lcov.coverage
+coverage.xml
