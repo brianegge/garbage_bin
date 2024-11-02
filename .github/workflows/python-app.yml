@@ -41,4 +41,9 @@ jobs:
         poetry run ruff check .
     - name: Run tests
       run: |
-        poetry run pytest
+        poetry run pytest \
+          --cov garbage_bin \
+          --cov-report xml
+        poetry run coverage lcov
+    - name: Coveralls GitHub Action
+      uses: coverallsapp/github-action@v2.3.4
