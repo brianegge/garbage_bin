@@ -16,3 +16,4 @@ lib/
 share/
 lib64
 config.txt
+coverage.xml
