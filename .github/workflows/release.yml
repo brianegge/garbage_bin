@@ -13,19 +13,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-      - name: Install systemd
-        run: sudo apt-get install -y libsystemd-dev
-      - name: Install Poetry
-        uses: abatilo/actions-poetry@v2.3.0
-        with:
-          poetry-version: "1.2.2"
+      # - name: Set up Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: "3.11"
+      # - name: Install systemd
+      #   run: sudo apt-get install -y libsystemd-dev
+      # - name: Install Poetry
+      #   uses: abatilo/actions-poetry@v2.3.0
+      #   with:
+      #     poetry-version: "1.2.2"
 
-      - name: Install dependencies
-        run: poetry config virtualenvs.in-project true && poetry install
+      # - name: Install dependencies
+      #   run: poetry config virtualenvs.in-project true && poetry install
 
       - name: Build Docker image
         run: docker build -t ${{ github.repository }}:${{ github.ref_name }} .
