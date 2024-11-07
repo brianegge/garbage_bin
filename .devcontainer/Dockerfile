@@ -30,7 +30,6 @@ RUN DEBIAN_FRONTEND=noninteractive \
         pkg-config \
         python3-systemd \
         gh
->>>>>>> Stashed changes
 
 # Python and poetry installation
 USER $USER
