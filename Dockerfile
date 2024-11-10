@@ -1,4 +1,4 @@
-FROM ubuntu:mantic-20240530
+FROM ubuntu:24.04
 
 RUN DEBIAN_FRONTEND=noninteractive \
     && apt-get update \
