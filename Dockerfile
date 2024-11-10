@@ -18,8 +18,10 @@ RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python
 
 COPY . /app
 WORKDIR /app
+# COPY pyproject.toml poetry.lock ./
 ENV PATH=/opt/poetry/bin:$PATH
-RUN poetry config virtualenvs.in-project true && poetry install
+RUN poetry config virtualenvs.in-project true && poetry install -vvv
+# COPY . ./
 # Python and poetry installation
 # ARG HOME="/home/$USER"
 # ARG PYTHON_VERSION=3.11
@@ -28,7 +30,7 @@ RUN poetry config virtualenvs.in-project true && poetry install
 # ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:$PATH"
 
 # WORKDIR /app
-# COPY pyproject.toml poetry.lock ./
+
 
 # # Install Poetry
 # RUN pip install --upgrade --break-system-packages pip && pip install --break-system-packages poetry

@@ -60,7 +60,7 @@ def main():
     sd.notify("STATUS=Loading")
     model = YOLO("best.pt")  # pretrained YOLOv8n model
     config = configparser.ConfigParser()
-    config.read("config.txt")
+    config.read("etc/config.txt")
     mqtt_config = config["mqtt"]
     lwt = "garagecam/status"
     mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam")
