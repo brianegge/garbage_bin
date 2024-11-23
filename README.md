@@ -15,7 +15,7 @@ python3 -m venv .
 pip install -r requirements.txt
 ```
 
-Install service
+Install service from source
 ```
 $ cat /etc/systemd/system/garbage_bin_detector.service
 [Unit]
@@ -33,6 +33,18 @@ ExecStart=/home/egge/garbage_bin/flask/simple.py
 [Install]
 WantedBy=multi-user.target
 ```
+
+Install service via podman
+```
+cp podman-systemd.service ~/.config/systemd/user/container-garbage_bin.service
+systemctl --user daemon-reload
+systemctl --user enable container-garbage_bin.service
+systemctl --user start container-garbage_bin.service
+
+systemctl --user enable podman-auto-update.service
+systemctl --user start podman-auto-update.service
+```
+
 You need to create a config file, example:
 ```
 [file]
