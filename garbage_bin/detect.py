@@ -3,7 +3,6 @@ import logging
 import os
 from datetime import date, datetime
 from io import BytesIO
-from typing import Dict
 
 import requests
 from PIL import Image
@@ -12,7 +11,7 @@ from requests.auth import HTTPDigestAuth
 # from flask import g
 
 
-def sanitize(j: Dict[str, any]) -> Dict[str, any]:
+def sanitize(j: dict[str, any]) -> dict[str, any]:
     o = {}
     for k, v in j.items():
         o[k.replace(" ", "_")] = v

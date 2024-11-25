@@ -29,7 +29,18 @@ RUN DEBIAN_FRONTEND=noninteractive \
         libsystemd-dev \
         pkg-config \
         python3-systemd \
-        gh
+        ack \
+        systemd \
+        libsystemd-dev \
+        libgl1
+
+RUN (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+    && sudo mkdir -p -m 755 /etc/apt/keyrings \
+    && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+    && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && sudo apt update \
+    && sudo apt install gh -y
 
 # Python and poetry installation
 USER $USER
@@ -42,8 +53,8 @@ COPY pyproject.toml poetry.lock /workspace/
 
 # ENV PYENV_ROOT="${HOME}/.pyenv"
 # ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:$PATH"
-RUN echo "Acquire::Check-Valid-Until \"false\";\nAcquire::Check-Date \"false\";" | cat > /etc/apt/apt.conf.d/10no--check-valid-until
-RUN apt-get update && apt-get install -y ack systemd libsystemd-dev libgl1
+# RUN echo "Acquire::Check-Valid-Until \"false\";\nAcquire::Check-Date \"false\";" | cat > /etc/apt/apt.conf.d/10no--check-valid-until
+# RUN apt-get update && apt-get install -y ack systemd libsystemd-dev libgl1
 RUN pipx install pre-commit
 
 # RUN echo "done 0" \
@@ -53,7 +64,7 @@ RUN pipx install pre-commit
 #     && echo "done 2" \
 #     && pyenv global ${PYTHON_VERSION} \
 #     && echo "done 3" \
-ENV PATH="/home/.local/bin:${PATH}"
+ENV PATH="${HOME}/.local/bin:${PATH}"
 RUN curl -sSL https://install.python-poetry.org | python3
 RUN poetry install --no-interaction --no-root \
      && poetry config virtualenvs.in-project true
