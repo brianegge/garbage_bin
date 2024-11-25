@@ -19,21 +19,21 @@ sdnotify = "^0.3.2"
 paho-mqtt = "^2.1.0"
 requests = "^2.32.3"
 systemd-python = "^235"
-black = "^24.10.0"
-ruff = "^0.7.0"
-pytest = "^8.3.3"
-pre-commit = "^4.0.1"
-
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
 black = "^24.10.0"
 coverage = "^7.6.4"
 pytest-cov = "^6.0.0"
+ruff = "^0.8.0"
+pre-commit = "^4.0.1"
 
 [tool.pytest.ini_options]
 python_files = "*_test.py"
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [

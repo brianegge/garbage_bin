@@ -36,7 +36,7 @@ class GracefulKiller:
     def exit_gracefully(self, *args):
         self.kill_now = True
 
-    def handle_sigabrt(signum, frame):
+    def handle_sigabrt(self, signum, frame):
         print("SIGABRT received")
         faulthandler.dump_traceback()
 
