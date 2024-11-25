@@ -40,12 +40,12 @@ def save(path, image, predictions):
         file.write(json.dumps(predictions))
 
 
-def get_image(camera):
+def get_image(camera, timeout=60):
     session = requests.Session()
     session.auth = HTTPDigestAuth(camera["user"], camera["password"])
     # curl -v --digest --user "admin:Password1"  "http://garage-cam.home/cgi-bin/snapshot.cgi" -o capture/garage.jpg
     url = f"http://{camera['host']}/cgi-bin/snapshot.cgi"
-    response = session.get(url)
+    response = session.get(url, timeout=timeout)
     img = Image.open(BytesIO(response.content))
     # img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
     if img is None:
