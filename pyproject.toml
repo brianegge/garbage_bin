@@ -12,7 +12,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-ultralytics = "8.3.36"
+ultralytics = "8.3.40"
 pillow = "^11.0.0"
 imageio = "^2.35.1"
 sdnotify = "^0.3.2"
