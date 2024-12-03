@@ -46,7 +46,7 @@ jobs:
           --cov-report xml
         poetry run coverage lcov
     - name: Upload coverage reports to Codecov with GitHub Action
-      uses: codecov/codecov-action@v4.2.0
+      uses: codecov/codecov-action@v4.6.0
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     - name: Coveralls GitHub Action
