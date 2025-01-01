@@ -33,7 +33,7 @@ ExecStart=/usr/bin/podman run \
 	-d \
 	--replace \
 	--name sdnotify \
-        -v /home/brianegge/etc/config.txt:/app/config.txt \
+        -v /home/brianegge/etc/config.ini:/app/config.ini \
         -v /data/capture:/data/capture --name garbage_bin_test \
 	--label io.containers.autoupdate=registry ghcr.io/brianegge/garbage_bin:latest
 ExecStop=/usr/bin/podman stop \

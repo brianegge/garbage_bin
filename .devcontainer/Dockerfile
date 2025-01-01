@@ -1,4 +1,4 @@
-ARG VARIANT="3.13-bullseye"
+ARG VARIANT="3.12-bullseye"
 FROM mcr.microsoft.com/devcontainers/python:${VARIANT}
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -45,28 +45,21 @@ RUN (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y
 # Python and poetry installation
 USER $USER
 ARG HOME="/home/$USER"
+ENV POETRY_HOME="$HOME/.poetry"
 ARG PYTHON_VERSION=3.12
 
 # RUN pipx install poetry
 WORKDIR /workspace
 COPY pyproject.toml poetry.lock /workspace/
-
+RUN pipx install pre-commit
 # ENV PYENV_ROOT="${HOME}/.pyenv"
 # ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:$PATH"
 # RUN echo "Acquire::Check-Valid-Until \"false\";\nAcquire::Check-Date \"false\";" | cat > /etc/apt/apt.conf.d/10no--check-valid-until
 # RUN apt-get update && apt-get install -y ack systemd libsystemd-dev libgl1
-RUN pipx install pre-commit
+# Install Python and Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
 
-# RUN echo "done 0" \
-#     && curl https://pyenv.run | bash \
-#     && echo "done 1" \
-#     && pyenv install ${PYTHON_VERSION} \
-#     && echo "done 2" \
-#     && pyenv global ${PYTHON_VERSION} \
-#     && echo "done 3" \
-ENV PATH="${HOME}/.local/bin:${PATH}"
-RUN curl -sSL https://install.python-poetry.org | python3
-RUN poetry install --no-interaction --no-root \
-     && poetry config virtualenvs.in-project true
-    # && poetry config virtualenvs.create false \
-    # && poetry config virtualenvs.prefer-active-python true
+
+ENV PATH="${HOME}/.local/bin:$POETRY_HOME/bin:${PATH}"
+# RUN curl -sSL https://install.python-poetry.org | python3
+RUN poetry config virtualenvs.in-project false

@@ -19,12 +19,27 @@ from garbage_bin.device import Device
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
 
-model = None
-
-running = True
+RUNNING = True
 
 
 class GracefulKiller:
+    """
+    A class to handle graceful termination of a program.
+
+    Attributes:
+    -----------
+    kill_now : bool
+        A flag to indicate if the program should terminate.
+
+    Methods:
+    --------
+    __init__():
+        Initializes the signal handlers for SIGABRT, SIGINT, and SIGTERM.
+
+    exit_gracefully(*args):
+        Sets the kill_now flag to True to indicate that the program should terminate.
+    """
+
     kill_now = False
 
     def __init__(self):
@@ -48,12 +63,33 @@ def on_connect(client, userdata, flags, reason_code, properties):
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
     log.info(f"mqtt disconnected reason: {reason_code}")
-    global running
-    running = False
+    global RUNNING
+    RUNNING = False
 
 
 def on_message(mqtt_client, obj, msg):
     log.info("on_message()")
+
+
+def get_section(config, section):
+    """
+    Retrieve a section from a configuration object and validate its existence.
+
+    Args:
+        config: A configparser-like object containing configuration sections
+        section (str): The name of the section to retrieve
+
+    Returns:
+        dict-like object: The configuration section if it exists
+
+    Raises:
+        ValueError: If the specified section does not exist in the config
+
+    Ensure that the specified section is present in the config.
+    """
+    if not config.has_section(section):
+        raise ValueError(f"Missing required section: {section}")
+    return config[section]
 
 
 def main():
@@ -61,8 +97,8 @@ def main():
     sd.notify("STATUS=Loading")
     model = YOLO("best.pt")  # pretrained YOLOv8n model
     config = configparser.ConfigParser()
-    config.read("etc/config.txt")
-    mqtt_config = config["mqtt"]
+    config.read("config.ini")
+    mqtt_config = get_section(config, "mqtt")
     lwt = "garagecam/status"
     mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam")
     mqtt_client.will_set(lwt, "offline", retain=True)
@@ -72,6 +108,9 @@ def main():
     mqtt_client.on_disconnect = on_disconnect
     mqtt_client.on_message = on_message
     mqtt_client.username_pw_set(mqtt_config["user"], mqtt_config["password"])
+    log.info(
+        "Connecting to MQTT broker at %s:%s", mqtt_config["host"], mqtt_config["port"]
+    )
     mqtt_client.connect(mqtt_config["host"], int(mqtt_config["port"]))
     mqtt_client.subscribe("test")  # get on connect messages
     mqtt_client.loop_start()
@@ -96,7 +135,7 @@ def main():
     sd.notify("READY=1")
     sd.notify("STATUS=Running")
     killer = GracefulKiller()
-    while running and not killer.kill_now:
+    while RUNNING and not killer.kill_now:
         try:
             start = time.time()
             objects, img = detectframe(model, get_image(config["camera"]))
@@ -132,6 +171,7 @@ def main():
     mqtt_client.disconnect()  # disconnect gracefully
     mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
+    sd.notify("STATUS=Gracefull Exit")
 
 
 if __name__ == "__main__":
