@@ -32,4 +32,4 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
 
 COPY . /app
 
-CMD ["python3", "main.py"]
+CMD ["python3", "garbage_bin/main.py"]
