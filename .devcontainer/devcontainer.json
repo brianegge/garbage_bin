@@ -17,7 +17,7 @@
             ]
         }
     },
-    //"postCreateCommand": "poetry install", // this line is problematc
+    "postCreateCommand": "pre-commit install && poetry install --no-interaction --no-root",
     //  Podman stuff
     "runArgs": ["--userns=keep-id"],
     "containerUser": "vscode",
