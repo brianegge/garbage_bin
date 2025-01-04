@@ -4,11 +4,11 @@ requires = ["poetry-core>=1.6"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "garbage-bin"
+name = "garbage_bin"
 version = "0.1.0"
 description = ""
 authors = ["Brian Egge <brianegge@gmail.com>"]
-readme = "README.md"
+# readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -28,10 +28,12 @@ coverage = "^7.6.4"
 pytest-cov = "^6.0.0"
 ruff = "^0.8.0"
 pre-commit = "^4.0.1"
+pytest-mock = "^3.14.0"
 
 [tool.pytest.ini_options]
 python_files = "*_test.py"
 testpaths = ["tests"]
+pythonpath = "garbage_bin"
 
 [tool.ruff]
 target-version = "py312"

@@ -10,11 +10,10 @@ import time
 
 import paho.mqtt.client as paho
 import sdnotify
+from detect import detectframe, get_image, sanitize, save
+from device import Device
 from PIL import UnidentifiedImageError
 from ultralytics import YOLO
-
-from garbage_bin.detect import detectframe, get_image, sanitize, save
-from garbage_bin.device import Device
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
@@ -96,8 +95,7 @@ def main():
     sd = sdnotify.SystemdNotifier()
     sd.notify("STATUS=Loading")
     model = YOLO("best.pt")  # pretrained YOLOv8n model
-    config = configparser.ConfigParser()
-    config.read("config.ini")
+    config = load_config()
     mqtt_config = get_section(config, "mqtt")
     lwt = "garagecam/status"
     mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam")
@@ -172,6 +170,25 @@ def main():
     mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
     sd.notify("STATUS=Gracefull Exit")
+
+
+def load_config():
+    """
+    Loads the configuration from a 'config.ini' file.
+
+    This function reads the 'config.ini' file using the configparser module,
+    logs the files read and the sections found in the configuration file,
+    and returns the configuration object.
+
+    Returns:
+        configparser.ConfigParser: The configuration object containing the
+        parsed configuration data.
+    """
+    config = configparser.ConfigParser()
+    files_read = config.read("config.ini")
+    log.info("Config files read: %s", files_read)
+    log.info("Config sections: %s", config.sections())
+    return config
 
 
 if __name__ == "__main__":
