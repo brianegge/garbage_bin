@@ -15,7 +15,7 @@ bin/
 lib/
 share/
 lib64
-config.txt
+config.ini
 
 coverage.lcov.coverage
 coverage.xml

@@ -7,16 +7,32 @@ The script uses a rolling average to determine if the object is present or absen
 
 <img width="779" alt="image" src="https://github.com/brianegge/garbage_bin/assets/175930/ee8b9e05-b508-479b-9ac7-670228d3a32f">
 
-*Linux Install*
+*Quick Start*
+
+You need to create a config file which connects to the camera and MQTT broker.
+
+```ini
+[file]
+# where to save the images
+path=/mnt/capture
+
+[camera]
+user=admin
+password=*****
+host=garage-cam.home
+
+[mqtt]
+host=mqtt
+port=1883
 ```
-sudo apt install libsystemd-dev
-python3 -m venv .
-. bin/activate
-pip install -r requirements.txt
+
+```bash
+podman run -it --rm -v etc/config.ini:/app/config.ini brianegge/garbage_bin
 ```
 
 Install service from source
-```
+
+```bash
 $ cat /etc/systemd/system/garbage_bin_detector.service
 [Unit]
 Description=Image processor to find the garbage bin
@@ -33,9 +49,9 @@ ExecStart=/home/egge/garbage_bin/flask/simple.py
 [Install]
 WantedBy=multi-user.target
 ```
-
 Install service via podman
-```
+
+```bash
 cp podman-systemd.service ~/.config/systemd/user/container-garbage_bin.service
 systemctl --user daemon-reload
 systemctl --user enable container-garbage_bin.service
@@ -45,25 +61,9 @@ systemctl --user enable podman-auto-update.service
 systemctl --user start podman-auto-update.service
 ```
 
-You need to create a config file, example:
-```
-[file]
-path=/mnt/capture
-
-[camera]
-user=admin
-password=*****
-host=garage-cam.home
-
-[mqtt]
-host=mqtt
-port=1883
-```
-In HomeAssistant I have a dashboard showing my garage (along with a camera view)
-<img width="512" alt="image" src="https://github.com/brianegge/garbage_bin/assets/175930/08ace11b-cb6f-429e-a0fd-e13706393528">
-
 Here is one of my automations, which closes my garage door after I leave:
-```
+
+```yaml
 alias: Garage Close Civic departs
 description: "Close left garage door after departure "
 trigger:
@@ -99,4 +99,5 @@ action:
         url: /lovelace-mobile/garage/
 mode: single
 ```
+
 The arriving home automations are a bit more complicated, because I might be driving either car. If both cars are away, I'm driving the Civic. If the Civic is present, I'm driving the CRV.
