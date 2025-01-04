@@ -10,11 +10,10 @@ import time
 
 import paho.mqtt.client as paho
 import sdnotify
+from detect import detectframe, get_image, sanitize, save
+from device import Device
 from PIL import UnidentifiedImageError
 from ultralytics import YOLO
-
-from garbage_bin.detect import detectframe, get_image, sanitize, save
-from garbage_bin.device import Device
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
@@ -97,7 +96,9 @@ def main():
     sd.notify("STATUS=Loading")
     model = YOLO("best.pt")  # pretrained YOLOv8n model
     config = configparser.ConfigParser()
-    config.read("config.ini")
+    files_read = config.read("config.ini")
+    log.info("Config files read: %s", files_read)
+    log.info("Config sections: %s", config.sections())
     mqtt_config = get_section(config, "mqtt")
     lwt = "garagecam/status"
     mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam")
