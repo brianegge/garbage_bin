@@ -2034,7 +2034,7 @@ description = "A language and compiler for custom Deep Learning operations"
 optional = false
 python-versions = "*"
 groups = ["main"]
-markers = "platform_system == \"Linux\" and platform_machine == \"x86_64\" and (python_version == \"3.12\" or python_version == \"3.11\" or python_version == \"3.10\")"
+markers = "platform_system == \"Linux\" and platform_machine == \"x86_64\" and python_version < \"3.13\""
 files = [
     {file = "triton-3.1.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6b0dd10a925263abbe9fa37dcde67a5e9b2383fc269fdf59f5657cac38c5d1d8"},
     {file = "triton-3.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0f34f6e7885d1bf0eaaf7ba875a5f0ce6f3c13ba98f9503651c1e6dc6757ed5c"},
@@ -2078,14 +2078,14 @@ files = [
 
 [[package]]
 name = "ultralytics"
-version = "8.3.94"
+version = "8.3.98"
 description = "Ultralytics YOLO 🚀 for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "ultralytics-8.3.94-py3-none-any.whl", hash = "sha256:d2d49d3bc0375862c29075962abb57ef534deb22998ce199f6298140886516f5"},
-    {file = "ultralytics-8.3.94.tar.gz", hash = "sha256:87b9cf3ed5e8c932d67f9c2cc276b235d61864440dd8dd8901481c7af38811c1"},
+    {file = "ultralytics-8.3.98-py3-none-any.whl", hash = "sha256:75c6c0d036a4bb28861d64250392cf489ff9ee23172971c67d9ebf61e9e7a544"},
+    {file = "ultralytics-8.3.98.tar.gz", hash = "sha256:a33b75ba1eadf403d4bb621073098e21efc0f05677d000ef257c5ca490f54096"},
 ]
 
 [package.dependencies]
@@ -2110,7 +2110,7 @@ ultralytics-thop = ">=2.0.0"
 
 [package.extras]
 dev = ["coverage[toml]", "ipython", "mkdocs (>=1.6.0)", "mkdocs-macros-plugin (>=1.0.5)", "mkdocs-material (>=9.5.9)", "mkdocs-redirects", "mkdocs-ultralytics-plugin (>=0.1.17)", "mkdocstrings[python]", "pytest", "pytest-cov"]
-export = ["coremltools (>=7.0) ; platform_system != \"Windows\" and python_version <= \"3.11\"", "flatbuffers (>=23.5.26,<100) ; platform_machine == \"aarch64\"", "h5py (!=3.11.0) ; platform_machine == \"aarch64\"", "keras", "onnx (>=1.12.0)", "openvino (>=2024.0.0,!=2025.0.0)", "scikit-learn (>=1.3.2) ; platform_system != \"Windows\" and python_version <= \"3.11\"", "tensorflow (>=2.0.0)", "tensorflowjs (>=4.0.0)", "tensorstore (>=0.1.63) ; platform_machine == \"aarch64\" and python_version >= \"3.9\""]
+export = ["coremltools (>=8.0) ; platform_system != \"Windows\" and python_version <= \"3.12\"", "flatbuffers (>=23.5.26,<100) ; platform_machine == \"aarch64\"", "h5py (!=3.11.0) ; platform_machine == \"aarch64\"", "keras", "onnx (>=1.12.0)", "openvino (>=2024.0.0,!=2025.0.0)", "scikit-learn (>=1.3.2) ; platform_system != \"Windows\" and python_version <= \"3.12\"", "tensorflow (>=2.0.0)", "tensorflowjs (>=4.0.0)", "tensorstore (>=0.1.63) ; platform_machine == \"aarch64\" and python_version >= \"3.9\""]
 extra = ["albumentations (>=1.4.6)", "hub-sdk (>=0.0.12)", "ipython", "pycocotools (>=2.0.7)"]
 logging = ["comet", "dvclive (>=2.12.0)", "tensorboard (>=2.13.0)"]
 solutions = ["shapely (>=2.0.0)", "streamlit"]
@@ -2173,4 +2173,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "1d00b31f702cd784de0b7c0c5d53c2447a8e2ca00ac71438656bee3b8979d9ef"
+content-hash = "08f3ec2d3f4a702f282732a44f26962cae027ee9f5b40fcbe7cd23d81a9335af"
