@@ -12,7 +12,7 @@ authors = ["Brian Egge <brianegge@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-ultralytics = "8.3.98"
+ultralytics = "8.3.102"
 pillow = "^11.0.0"
 imageio = "^2.35.1"
 sdnotify = "^0.3.2"
