@@ -2113,19 +2113,19 @@ files = [
 
 [[package]]
 name = "ultralytics"
-version = "8.3.111"
+version = "8.3.124"
 description = "Ultralytics YOLO 🚀 for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "ultralytics-8.3.111-py3-none-any.whl", hash = "sha256:41f258a0e195b7cf388e5e4f19acd4b6c579ab6ee51f656d5662c53cf38bbc86"},
-    {file = "ultralytics-8.3.111.tar.gz", hash = "sha256:7dbe2da046d56e15128d08da052b13f3861c34a959451b5ddcd4d7efffef8dfa"},
+    {file = "ultralytics-8.3.124-py3-none-any.whl", hash = "sha256:fdae7406fffef54829bac09af7948c6052f13260b6f1c544dd1b5f7f6d5a341d"},
+    {file = "ultralytics-8.3.124.tar.gz", hash = "sha256:5f49cee43ed03252dfd2e929027ccc357e164435ab5b847de3f0831a429f261f"},
 ]
 
 [package.dependencies]
 matplotlib = ">=3.3.0"
-numpy = ">=1.23.0,<=2.1.1"
+numpy = ">=1.23.0"
 opencv-python = ">=4.6.0"
 pandas = ">=1.1.4"
 pillow = ">=7.1.2"
@@ -2145,10 +2145,10 @@ ultralytics-thop = ">=2.0.0"
 
 [package.extras]
 dev = ["coverage[toml]", "ipython", "mkdocs (>=1.6.0)", "mkdocs-macros-plugin (>=1.0.5)", "mkdocs-material (>=9.5.9)", "mkdocs-ultralytics-plugin (>=0.1.17)", "mkdocstrings[python]", "pytest", "pytest-cov"]
-export = ["coremltools (>=8.0) ; platform_system != \"Windows\" and python_version <= \"3.12\"", "flatbuffers (>=23.5.26,<100) ; platform_machine == \"aarch64\"", "h5py (!=3.11.0) ; platform_machine == \"aarch64\"", "keras", "onnx (>=1.12.0)", "openvino (>=2024.0.0)", "scikit-learn (>=1.3.2) ; platform_system != \"Windows\" and python_version <= \"3.12\"", "tensorflow (>=2.0.0)", "tensorflowjs (>=4.0.0)", "tensorstore (>=0.1.63) ; platform_machine == \"aarch64\" and python_version >= \"3.9\""]
+export = ["coremltools (>=8.0) ; platform_system != \"Windows\" and python_version <= \"3.13\"", "h5py (!=3.11.0) ; platform_machine == \"aarch64\"", "onnx (>=1.12.0)", "openvino (>=2024.0.0)", "scikit-learn (>=1.3.2) ; platform_system != \"Windows\" and python_version <= \"3.13\"", "tensorflow (>=2.0.0)", "tensorflowjs (>=2.0.0)", "tensorstore (>=0.1.63) ; platform_machine == \"aarch64\" and python_version >= \"3.9\""]
 extra = ["albumentations (>=1.4.6)", "hub-sdk (>=0.0.12)", "ipython", "pycocotools (>=2.0.7)"]
-logging = ["comet", "dvclive (>=2.12.0)", "tensorboard (>=2.13.0)"]
-solutions = ["shapely (>=2.0.0,<2.1.0)", "streamlit (>=1.29.0,<1.44.0)"]
+logging = ["mlflow", "tensorboard", "wandb"]
+solutions = ["shapely (>=2.0.0)", "streamlit (>=1.29.0)"]
 
 [[package]]
 name = "ultralytics-thop"
@@ -2208,4 +2208,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "2300a58892738d0af8d178282ef210bb65b7ac58835d4939732447917f0a06f0"
+content-hash = "b25f2dd74fa87f476f44db4c5a4b689659d0a26654910d4c11d7454799f84ad3"
