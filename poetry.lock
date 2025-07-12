@@ -2137,14 +2137,14 @@ files = [
 
 [[package]]
 name = "ultralytics"
-version = "8.3.160"
+version = "8.3.165"
 description = "Ultralytics YOLO 🚀 for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "ultralytics-8.3.160-py3-none-any.whl", hash = "sha256:896d828ddfeb991a472a3527d81482442d0a7b3a370caeb3a4127a86dd91e2e5"},
-    {file = "ultralytics-8.3.160.tar.gz", hash = "sha256:5d0b1eccc6b728cadd2ab6dea6bd9bb359703151e88e289479de7d258872a551"},
+    {file = "ultralytics-8.3.165-py3-none-any.whl", hash = "sha256:767dc98156556fb887229f6fde504094359a8e9b91f358d60d102fa6bb25a1a8"},
+    {file = "ultralytics-8.3.165.tar.gz", hash = "sha256:7e1e72e85e32358e88406a6e546f0fd78ed178a541574b43f7449c8d1e3f05e5"},
 ]
 
 [package.dependencies]
@@ -2172,6 +2172,7 @@ export = ["coremltools (>=8.0) ; platform_system != \"Windows\" and python_versi
 extra = ["albumentations (>=1.4.6)", "faster-coco-eval (>=1.6.7)", "hub-sdk (>=0.0.12)", "ipython"]
 logging = ["mlflow", "tensorboard", "wandb"]
 solutions = ["flask (>=3.0.1)", "shapely (>=2.0.0)", "streamlit (>=1.29.0)"]
+typing = ["pandas-stubs", "scipy-stubs", "types-pillow", "types-psutil", "types-pyyaml", "types-requests", "types-shapely"]
 
 [[package]]
 name = "ultralytics-thop"
@@ -2231,4 +2232,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "dca1bbeee3721dfafee90835198587d0e8a690570a3ade6f69be37fc04561fb9"
+content-hash = "e892127f2906415b1460ad6c1e1edb67fcd5ca0310028c12d9219bfeee812fac"
