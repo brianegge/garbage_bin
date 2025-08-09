@@ -2158,14 +2158,14 @@ files = [
 
 [[package]]
 name = "ultralytics"
-version = "8.3.172"
+version = "8.3.176"
 description = "Ultralytics YOLO 🚀 for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "ultralytics-8.3.172-py3-none-any.whl", hash = "sha256:f93854f7adeb2bea4a7f8ad0f29e0b70d40cf393ce0ede4a494a02f3bb069239"},
-    {file = "ultralytics-8.3.172.tar.gz", hash = "sha256:68f04ed622e41c99fb0f22e0afd92bc2e07d4300dc2a035ce678070b0c74530f"},
+    {file = "ultralytics-8.3.176-py3-none-any.whl", hash = "sha256:07ea80fb4e74e02ac4f3114b86120cc8feecbc69cc4b0beca9d4e11c7bbdb553"},
+    {file = "ultralytics-8.3.176.tar.gz", hash = "sha256:ba5e402fe1976bb07f97117b4544c97265772f12470ca60eebb6e9aebf17ce08"},
 ]
 
 [package.dependencies]
@@ -2188,7 +2188,7 @@ tqdm = ">=4.64.0"
 ultralytics-thop = ">=2.0.0"
 
 [package.extras]
-dev = ["coverage[toml]", "ipython", "mkdocs (>=1.6.0)", "mkdocs-macros-plugin (>=1.0.5)", "mkdocs-material (>=9.5.9)", "mkdocs-ultralytics-plugin (>=0.1.19)", "mkdocstrings[python]", "pytest", "pytest-cov"]
+dev = ["click (==8.2.1)", "coverage[toml]", "ipython", "mkdocs (>=1.6.0)", "mkdocs-macros-plugin (>=1.0.5)", "mkdocs-material (>=9.5.9)", "mkdocs-ultralytics-plugin (>=0.1.26)", "mkdocstrings[python]", "pytest", "pytest-cov"]
 export = ["coremltools (>=8.0) ; platform_system != \"Windows\" and python_version <= \"3.13\"", "h5py (!=3.11.0) ; platform_machine == \"aarch64\"", "onnx (>=1.12.0,<1.18.0)", "openvino (>=2024.0.0)", "scikit-learn (>=1.3.2) ; platform_system != \"Windows\" and python_version <= \"3.13\"", "tensorflow (>=2.0.0)", "tensorflowjs (>=2.0.0)", "tensorstore (>=0.1.63) ; platform_machine == \"aarch64\" and python_version >= \"3.9\""]
 extra = ["albumentations (>=1.4.6)", "faster-coco-eval (>=1.6.7)", "hub-sdk (>=0.0.12)", "ipython"]
 logging = ["mlflow", "tensorboard", "wandb"]
@@ -2253,4 +2253,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "75057f3623ac1636ae6ab20fcb83537aaf0f6f630f2936240c4f849a05344dda"
+content-hash = "649c367537197f38b612f60cb8b0b9a54898470c780d822933ea3b7fbe73ebf6"
