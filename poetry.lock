@@ -1563,18 +1563,6 @@ dev = ["black", "check-manifest", "coverage", "packaging", "pylint", "pyperf", "
 test = ["pytest", "pytest-xdist", "setuptools"]
 
 [[package]]
-name = "py-cpuinfo"
-version = "9.0.0"
-description = "Get CPU info with pure Python"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "py-cpuinfo-9.0.0.tar.gz", hash = "sha256:3cdbbf3fac90dc6f118bfd64384f309edeadd902d7c8fb17f02ffa1fc3f49690"},
-    {file = "py_cpuinfo-9.0.0-py3-none-any.whl", hash = "sha256:859625bc251f64e21f077d099d4162689c762b5d6a4c3c97553d56241c9674d5"},
-]
-
-[[package]]
 name = "pygments"
 version = "2.19.1"
 description = "Pygments is a syntax highlighting package written in Python."
@@ -2070,14 +2058,14 @@ markers = {dev = "python_version == \"3.10\""}
 
 [[package]]
 name = "ultralytics"
-version = "8.3.192"
+version = "8.3.202"
 description = "Ultralytics YOLO 🚀 for SOTA object detection, multi-object tracking, instance segmentation, pose estimation and image classification."
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "ultralytics-8.3.192-py3-none-any.whl", hash = "sha256:d425d3e7f8d8affc58525aa544db6bbe746949e180e197dc5c93e0ccd603aa3e"},
-    {file = "ultralytics-8.3.192.tar.gz", hash = "sha256:b40c80b3196d40cef24abf1b21f061f2ff2493fe7c3ff5a905984cfd36ce3f5a"},
+    {file = "ultralytics-8.3.202-py3-none-any.whl", hash = "sha256:15915108e6d54d299a64149000221dcc51c621f6dc9500b46ea2edf0164dc974"},
+    {file = "ultralytics-8.3.202.tar.gz", hash = "sha256:76c23100c6896ca37e1046c9b12b8a755aeedd03fc45870cba527095a31a2660"},
 ]
 
 [package.dependencies]
@@ -2087,7 +2075,6 @@ opencv-python = ">=4.6.0"
 pillow = ">=7.1.2"
 polars = "*"
 psutil = "*"
-py-cpuinfo = "*"
 pyyaml = ">=5.3.1"
 requests = ">=2.23.0"
 scipy = ">=1.4.1"
@@ -2164,4 +2151,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "ece71e5049a553e13bcb5cf40d13b5e76c513abc68d94513ea5fc991cd881e01"
+content-hash = "1707d4952502ce5730eda58628f57c9be534f71dea3c3df747a2d9f0d0e979b0"
