@@ -1,4 +1,4 @@
-ARG VARIANT="3.12-bullseye"
+ARG VARIANT="3.13-bullseye"
 FROM mcr.microsoft.com/devcontainers/python:${VARIANT}
 
 ARG DEBIAN_FRONTEND=noninteractive
