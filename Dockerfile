@@ -38,7 +38,7 @@ ENV PATH="$POETRY_HOME/bin:$PATH"
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
 RUN --mount=type=cache,target=/root/.cache/pypoetry \
-       poetry install --only main --no-interaction
+       poetry install --only main --no-interaction --no-root
 
 COPY . /app
 
