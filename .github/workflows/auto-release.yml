@@ -43,8 +43,17 @@ jobs:
           # Remove 'v' prefix if present
           VERSION=${LATEST_TAG#v}
 
+          # Strip any pre-release or build metadata (e.g., "-beta", "+build")
+          BASE_VERSION="${VERSION%%[-+]*}"
+
+          # Ensure the base version is in MAJOR.MINOR.PATCH numeric format
+          if ! [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Unsupported version format: $LATEST_TAG (parsed as '$BASE_VERSION')" >&2
+            exit 1
+          fi
+
           # Split version into components
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
 
           # Bump patch version for dependency updates
           PATCH=$((PATCH + 1))
