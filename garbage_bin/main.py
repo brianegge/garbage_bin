@@ -169,7 +169,7 @@ def main():
     mqtt_client.disconnect()  # disconnect gracefully
     mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
-    sd.notify("STATUS=Gracefull Exit")
+    sd.notify("STATUS=Graceful Exit")
 
 
 def load_config():
