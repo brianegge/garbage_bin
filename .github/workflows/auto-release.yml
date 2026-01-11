@@ -6,13 +6,11 @@ on:
       - main
       - master
 
-permissions:
-  contents: write
-  packages: write
-
 jobs:
   auto-tag:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # Only run if commit is from Renovate or contains dependency update keywords
     if: |
       contains(github.event.head_commit.message, 'Update dependency') ||
