@@ -6,6 +6,10 @@ on:
       - main
       - master
 
+concurrency:
+  group: auto-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   auto-tag:
     runs-on: ubuntu-latest
