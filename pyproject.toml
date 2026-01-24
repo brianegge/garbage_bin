@@ -23,7 +23,7 @@ opencv-python-headless = "^4.10.0.84"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.0"
-black = "^25.0.0"
+black = "^26.0.0"
 coverage = "^7.6.4"
 pytest-cov = "^7.0.0"
 ruff = "^0.14.0"
