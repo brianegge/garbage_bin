@@ -9,6 +9,7 @@ import sys
 import time
 
 import paho.mqtt.client as paho
+import requests.exceptions
 import sdnotify
 from detect import detectframe, get_image, sanitize, save
 from device import Device
@@ -162,6 +163,8 @@ def main():
                 time.sleep(delay)
         except UnidentifiedImageError:
             pass
+        except requests.exceptions.RequestException as e:
+            log.warning("Camera connection error: %s", e)
         except KeyboardInterrupt:
             break
     publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)

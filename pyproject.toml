@@ -1,34 +1,33 @@
-[build-system]
-# Should be the same as `$POETRY_VERSION`:
-requires = ["poetry-core>=1.6"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
+[project]
 name = "garbage_bin"
 version = "0.1.0"
 description = ""
-authors = ["Brian Egge <brianegge@gmail.com>"]
-# readme = "README.md"
+authors = [{ name = "Brian Egge", email = "brianegge@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "ultralytics==8.4.7",
+    "pillow>=12.0.0",
+    "imageio>=2.35.1",
+    "sdnotify>=0.3.2",
+    "paho-mqtt>=2.1.0",
+    "requests>=2.32.3",
+    "opencv-python-headless>=4.10.0.84",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-ultralytics = "8.4.7"
-pillow = "^12.0.0"
-imageio = "^2.35.1"
-sdnotify = "^0.3.2"
-paho-mqtt = "^2.1.0"
-requests = "^2.32.3"
-systemd-python = "^235"
-opencv-python-headless = "^4.10.0.84"
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.0",
+    "black>=25.0.0",
+    "coverage>=7.6.4",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.0",
+    "pre-commit>=4.0.1",
+    "pytest-mock>=3.14.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^9.0.0"
-black = "^25.0.0"
-coverage = "^7.6.4"
-pytest-cov = "^7.0.0"
-ruff = "^0.14.0"
-pre-commit = "^4.0.1"
-pytest-mock = "^3.14.0"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 python_files = "*_test.py"
