@@ -97,7 +97,7 @@ jobs:
         run: |
           # If the release already exists, skip creation to keep the workflow idempotent
           if gh release view "$NEW_VERSION" >/dev/null 2>&1; then
-            echo "Release $NEW_VERSION already exists, skipping creation."
+            echo "::notice::Release $NEW_VERSION already exists, skipping creation."
             exit 0
           fi
           gh release create "$NEW_VERSION" \
