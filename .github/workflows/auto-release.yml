@@ -89,6 +89,16 @@ jobs:
           git push origin "$NEW_VERSION"
           echo "Created and pushed tag: $NEW_VERSION"
 
+      - name: Create GitHub Release
+        if: steps.check_daily_limit.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.bump_version.outputs.new_version }}
+        run: |
+          gh release create "$NEW_VERSION" \
+            --title "$NEW_VERSION" \
+            --generate-notes
+
       - name: Docker meta
         if: steps.check_daily_limit.outputs.skip != 'true'
         id: meta
