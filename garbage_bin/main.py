@@ -11,7 +11,7 @@ import time
 import paho.mqtt.client as paho
 import requests.exceptions
 import sdnotify
-from detect import detectframe, get_image, sanitize, save
+from detect import detectframe, get_image, sanitize, save, sync_local_to_remote
 from device import Device
 from PIL import UnidentifiedImageError
 from ultralytics import YOLO
@@ -167,6 +167,10 @@ def main():
             log.warning("Camera connection error: %s", e)
         except KeyboardInterrupt:
             break
+        try:
+            sync_local_to_remote(config["file"]["path"])
+        except Exception as e:
+            log.warning("Failed to sync local files: %s", e)
     publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
     publish_result.wait_for_publish()
     mqtt_client.disconnect()  # disconnect gracefully
