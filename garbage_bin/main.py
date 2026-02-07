@@ -129,6 +129,18 @@ def main():
             json.dumps(j),
             retain=True,
         )
+    nfs_storage_config = {
+        "name": "NFS Storage",
+        "state_topic": "garagecam/nfs_storage/state",
+        "device_class": "problem",
+        "uniq_id": "garagecam-nfs_storage",
+        "availability_topic": lwt,
+    }
+    mqtt_client.publish(
+        "homeassistant/binary_sensor/garagecam-nfs_storage/config",
+        json.dumps(nfs_storage_config),
+        retain=True,
+    )
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
     sd.notify("READY=1")
@@ -152,7 +164,12 @@ def main():
                 else:
                     command = device.update(0.0)
                 if command is not None:
-                    save(config["file"]["path"], img, sanitize(objects))
+                    nfs_ok = save(config["file"]["path"], img, sanitize(objects))
+                    mqtt_client.publish(
+                        "garagecam/nfs_storage/state",
+                        "OFF" if nfs_ok else "ON",
+                        retain=True,
+                    )
                     mqtt_client.publish(
                         f"{device.hass_name}/state",
                         command.upper(),
