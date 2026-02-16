@@ -59,6 +59,7 @@ def on_publish(client, userdata, mid, reason_codes, properties):
 def on_connect(client, userdata, flags, reason_code, properties):
     log.info(f"mqtt connected: {reason_code}")
     client.publish("garagecam/status", "online", retain=True)
+    client.publish("garagecam/process/state", "running", retain=True)
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
@@ -141,6 +142,17 @@ def main():
         json.dumps(nfs_storage_config),
         retain=True,
     )
+    process_state_config = {
+        "name": "Garagecam Process",
+        "state_topic": "garagecam/process/state",
+        "uniq_id": "garagecam-process-state",
+        "availability_topic": lwt,
+    }
+    mqtt_client.publish(
+        "homeassistant/sensor/garagecam-process-state/config",
+        json.dumps(process_state_config),
+        retain=True,
+    )
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
     sd.notify("READY=1")
@@ -185,9 +197,15 @@ def main():
         except KeyboardInterrupt:
             break
         try:
-            sync_local_to_remote(config["file"]["path"])
+            nfs_ok = sync_local_to_remote(config["file"]["path"])
+            mqtt_client.publish(
+                "garagecam/nfs_storage/state",
+                "OFF" if nfs_ok else "ON",
+                retain=True,
+            )
         except Exception as e:
             log.warning("Failed to sync local files: %s", e)
+    mqtt_client.publish("garagecam/process/state", "stopped", retain=True)
     publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
     publish_result.wait_for_publish()
     mqtt_client.disconnect()  # disconnect gracefully
