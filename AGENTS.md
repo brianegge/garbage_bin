@@ -42,7 +42,7 @@ uv run ruff format .
 
 ## Committing
 
-Pre-commit hooks enforce linting, formatting, and block direct commits to master.
+Pre-commit hooks enforce linting, formatting, and block direct commits to master and main.
 Always create a feature branch before committing:
 ```bash
 git checkout -b my-feature
