@@ -45,7 +45,11 @@ def save(path, image, predictions):
             "NFS path unavailable (%s), falling back to %s", e, LOCAL_FALLBACK
         )
         pathname = os.path.join(LOCAL_FALLBACK, datedir)
-        os.makedirs(pathname, exist_ok=True)
+        try:
+            os.makedirs(pathname, exist_ok=True)
+        except OSError as e2:
+            logging.error("Local fallback also unavailable: %s", e2)
+            return False
         nfs_ok = False
     basename = os.path.join(
         pathname,
@@ -56,20 +60,27 @@ def save(path, image, predictions):
         + "_".join(detected_objects).lower(),
     )
     logging.info("Saving %s", basename)
-    # pimg = Image.fromarray(image)
-    image.save(basename + ".jpg")
-    with open(basename + ".txt", "w") as file:
-        file.write(json.dumps(predictions))
+    try:
+        image.save(basename + ".jpg")
+        with open(basename + ".txt", "w") as file:
+            file.write(json.dumps(predictions))
+    except OSError as e:
+        logging.error("Failed to save detection output to %s: %s", basename, e)
+        return False
     return nfs_ok
 
 
 def sync_local_to_remote(remote_path):
-    """Move files from local fallback to the remote NFS path when it's available."""
+    """Move files from local fallback to the remote NFS path when it's available.
+
+    Returns:
+        True if the remote path is writable, False otherwise.
+    """
     if not os.path.exists(LOCAL_FALLBACK):
-        return
+        return True
     dirs = os.listdir(LOCAL_FALLBACK)
     if not dirs:
-        return
+        return True
     # Check if remote path is writable
     try:
         os.makedirs(remote_path, exist_ok=True)
@@ -77,7 +88,7 @@ def sync_local_to_remote(remote_path):
         open(testfile, "w").close()
         os.remove(testfile)
     except OSError:
-        return
+        return False
     for datedir in dirs:
         src_dir = os.path.join(LOCAL_FALLBACK, datedir)
         if not os.path.isdir(src_dir):
@@ -87,14 +98,21 @@ def sync_local_to_remote(remote_path):
         for filename in os.listdir(src_dir):
             src = os.path.join(src_dir, filename)
             dst = os.path.join(dst_dir, filename)
+            if os.path.exists(dst):
+                base, ext = os.path.splitext(dst)
+                index = 1
+                while os.path.exists(dst):
+                    dst = f"{base}_{index}{ext}"
+                    index += 1
             try:
                 shutil.move(src, dst)
                 logging.info("Synced %s -> %s", src, dst)
             except OSError as e:
                 logging.warning("Failed to sync %s: %s", src, e)
-                return
+                return False
         with contextlib.suppress(OSError):
             os.rmdir(src_dir)
+    return True
 
 
 def get_image(camera, timeout=60):

@@ -145,11 +145,11 @@ def main():
     process_state_config = {
         "name": "Garagecam Process",
         "state_topic": "garagecam/process/state",
-        "uniq_id": "garagecam-process-state",
+        "uniq_id": "garagecam-process",
         "availability_topic": lwt,
     }
     mqtt_client.publish(
-        "homeassistant/sensor/garagecam-process-state/config",
+        "homeassistant/sensor/garagecam-process/config",
         json.dumps(process_state_config),
         retain=True,
     )
