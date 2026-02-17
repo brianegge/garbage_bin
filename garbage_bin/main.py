@@ -206,6 +206,10 @@ def main():
             )
         except Exception as e:
             log.warning("Failed to sync local files: %s", e)
+    graceful_shutdown(mqtt_client, lwt, sd)
+
+
+def graceful_shutdown(mqtt_client, lwt, sd):
     try:
         mqtt_client.publish("garagecam/process/state", "stopped", retain=True)
         publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
