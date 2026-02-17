@@ -2,7 +2,13 @@ import configparser
 
 import pytest
 
-from garbage_bin.main import get_section, load_config, on_connect, on_disconnect
+from garbage_bin.main import (
+    get_section,
+    graceful_shutdown,
+    load_config,
+    on_connect,
+    on_disconnect,
+)
 
 
 def test_get_section_exists():
@@ -50,9 +56,44 @@ def test_on_connect_publishes_status_and_process_state(mocker):
     client.publish.assert_any_call("garagecam/process/state", "running", retain=True)
 
 
-def test_on_disconnect_sets_running_false(mocker):
-    import garbage_bin.main as main_module
+def test_on_disconnect_clean(mocker, caplog):
+    """Clean disconnect (reason_code 0) logs at info level."""
+    import logging
 
-    main_module.RUNNING = True
-    on_disconnect(mocker.MagicMock(), None, None, 0, None)
-    assert main_module.RUNNING is False
+    with caplog.at_level(logging.INFO):
+        on_disconnect(mocker.MagicMock(), None, None, 0, None)
+    assert "mqtt disconnected (clean)" in caplog.text
+
+
+def test_on_disconnect_unexpected(mocker, caplog):
+    """Unexpected disconnect logs a warning and does not kill the process."""
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        on_disconnect(mocker.MagicMock(), None, None, 7, None)
+    assert "auto-reconnect" in caplog.text
+
+
+def test_graceful_shutdown_publishes_and_disconnects(mocker):
+    client = mocker.MagicMock()
+    sd = mocker.MagicMock()
+    graceful_shutdown(client, "garagecam/status", sd)
+    client.publish.assert_any_call("garagecam/process/state", "stopped", retain=True)
+    client.publish.assert_any_call("garagecam/status", payload="offline", retain=True)
+    client.disconnect.assert_called_once()
+    client.loop_stop.assert_called_once()
+    sd.notify.assert_called_with("STATUS=Graceful Exit")
+
+
+def test_graceful_shutdown_handles_publish_failure(mocker, caplog):
+    """Shutdown completes even when MQTT publish fails."""
+    import logging
+
+    client = mocker.MagicMock()
+    client.publish.side_effect = RuntimeError("not connected")
+    sd = mocker.MagicMock()
+    with caplog.at_level(logging.WARNING):
+        graceful_shutdown(client, "garagecam/status", sd)
+    assert "Could not publish offline status" in caplog.text
+    client.disconnect.assert_called_once()
+    client.loop_stop.assert_called_once()
