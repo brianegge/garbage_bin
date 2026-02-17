@@ -1,3 +1,5 @@
+import os
+
 from PIL import Image
 
 import garbage_bin.detect as detect
@@ -14,19 +16,43 @@ def test_save_returns_false_on_unwritable_nfs(tmp_path, monkeypatch):
     local = tmp_path / "local"
     local.mkdir()
     monkeypatch.setattr(detect, "LOCAL_FALLBACK", str(local))
+
+    # Create an unwritable NFS path using tmp_path
+    nfs_path = tmp_path / "nfs"
+    nfs_path.mkdir()
+    os.chmod(nfs_path, 0o444)  # Make read-only to trigger OSError
+
     img = Image.new("RGB", (10, 10))
-    result = save("/nonexistent/nfs/path", img, {"car": 0.9, "something": 0.5})
-    assert result is False
-    # Verify files were written to local fallback
-    files = list(local.rglob("*.jpg"))
-    assert len(files) == 1
+    try:
+        result = save(str(nfs_path), img, {"car": 0.9, "something": 0.5})
+        assert result is False
+        # Verify files were written to local fallback
+        files = list(local.rglob("*.jpg"))
+        assert len(files) == 1
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(nfs_path, 0o755)
 
 
-def test_save_returns_false_when_both_paths_fail(monkeypatch):
-    monkeypatch.setattr(detect, "LOCAL_FALLBACK", "/nonexistent/local")
+def test_save_returns_false_when_both_paths_fail(tmp_path, monkeypatch):
+    # Create unwritable paths using tmp_path
+    nfs_path = tmp_path / "nfs"
+    nfs_path.mkdir()
+    os.chmod(nfs_path, 0o444)  # Make read-only
+
+    local_path = tmp_path / "local"
+    local_path.mkdir()
+    os.chmod(local_path, 0o444)  # Make read-only
+
+    monkeypatch.setattr(detect, "LOCAL_FALLBACK", str(local_path))
     img = Image.new("RGB", (10, 10))
-    result = save("/nonexistent/nfs", img, {"car": 0.9, "something": 0.5})
-    assert result is False
+    try:
+        result = save(str(nfs_path), img, {"car": 0.9, "something": 0.5})
+        assert result is False
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(nfs_path, 0o755)
+        os.chmod(local_path, 0o755)
 
 
 def test_sync_local_to_remote_moves_files(tmp_path, monkeypatch):
@@ -51,10 +77,19 @@ def test_sync_local_to_remote_returns_false_on_unwritable(tmp_path, monkeypatch)
     (datedir / "test.jpg").write_text("image data")
     monkeypatch.setattr(detect, "LOCAL_FALLBACK", str(local))
 
-    result = sync_local_to_remote("/nonexistent/remote")
-    assert result is False
-    # File should still be in local
-    assert (datedir / "test.jpg").exists()
+    # Create unwritable remote path
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    os.chmod(remote, 0o444)  # Make read-only
+
+    try:
+        result = sync_local_to_remote(str(remote))
+        assert result is False
+        # File should still be in local
+        assert (datedir / "test.jpg").exists()
+    finally:
+        # Restore permissions for cleanup
+        os.chmod(remote, 0o755)
 
 
 def test_sync_local_to_remote_handles_collision(tmp_path, monkeypatch):
@@ -77,7 +112,9 @@ def test_sync_local_to_remote_handles_collision(tmp_path, monkeypatch):
     assert (remote_datedir / "test_1.jpg").read_text() == "new data"
 
 
-def test_sync_returns_true_when_no_local_fallback(monkeypatch):
-    monkeypatch.setattr(detect, "LOCAL_FALLBACK", "/nonexistent/path")
-    result = sync_local_to_remote("/some/remote")
+def test_sync_returns_true_when_no_local_fallback(tmp_path, monkeypatch):
+    # Use a non-existent subdirectory within tmp_path instead of absolute path
+    nonexistent = tmp_path / "nonexistent_fallback"
+    monkeypatch.setattr(detect, "LOCAL_FALLBACK", str(nonexistent))
+    result = sync_local_to_remote(str(tmp_path / "some_remote"))
     assert result is True
