@@ -5,6 +5,10 @@ from PIL import Image
 import garbage_bin.detect as detect
 from garbage_bin.detect import save, sync_local_to_remote
 
+# Permission mode constants
+READ_ONLY_MODE = 0o444
+WRITABLE_MODE = 0o755
+
 
 def test_save_returns_true_on_nfs(tmp_path):
     img = Image.new("RGB", (10, 10))
@@ -20,7 +24,7 @@ def test_save_returns_false_on_unwritable_nfs(tmp_path, monkeypatch):
     # Create an unwritable NFS path using tmp_path
     nfs_path = tmp_path / "nfs"
     nfs_path.mkdir()
-    os.chmod(nfs_path, 0o444)  # Make read-only to trigger OSError
+    os.chmod(nfs_path, READ_ONLY_MODE)  # Make read-only to prevent file creation
 
     img = Image.new("RGB", (10, 10))
     try:
@@ -31,18 +35,18 @@ def test_save_returns_false_on_unwritable_nfs(tmp_path, monkeypatch):
         assert len(files) == 1
     finally:
         # Restore permissions for cleanup
-        os.chmod(nfs_path, 0o755)
+        os.chmod(nfs_path, WRITABLE_MODE)
 
 
 def test_save_returns_false_when_both_paths_fail(tmp_path, monkeypatch):
     # Create unwritable paths using tmp_path
     nfs_path = tmp_path / "nfs"
     nfs_path.mkdir()
-    os.chmod(nfs_path, 0o444)  # Make read-only
+    os.chmod(nfs_path, READ_ONLY_MODE)  # Make read-only
 
     local_path = tmp_path / "local"
     local_path.mkdir()
-    os.chmod(local_path, 0o444)  # Make read-only
+    os.chmod(local_path, READ_ONLY_MODE)  # Make read-only
 
     monkeypatch.setattr(detect, "LOCAL_FALLBACK", str(local_path))
     img = Image.new("RGB", (10, 10))
@@ -51,8 +55,8 @@ def test_save_returns_false_when_both_paths_fail(tmp_path, monkeypatch):
         assert result is False
     finally:
         # Restore permissions for cleanup
-        os.chmod(nfs_path, 0o755)
-        os.chmod(local_path, 0o755)
+        os.chmod(nfs_path, WRITABLE_MODE)
+        os.chmod(local_path, WRITABLE_MODE)
 
 
 def test_sync_local_to_remote_moves_files(tmp_path, monkeypatch):
@@ -80,7 +84,7 @@ def test_sync_local_to_remote_returns_false_on_unwritable(tmp_path, monkeypatch)
     # Create unwritable remote path
     remote = tmp_path / "remote"
     remote.mkdir()
-    os.chmod(remote, 0o444)  # Make read-only
+    os.chmod(remote, READ_ONLY_MODE)  # Make read-only
 
     try:
         result = sync_local_to_remote(str(remote))
@@ -89,7 +93,7 @@ def test_sync_local_to_remote_returns_false_on_unwritable(tmp_path, monkeypatch)
         assert (datedir / "test.jpg").exists()
     finally:
         # Restore permissions for cleanup
-        os.chmod(remote, 0o755)
+        os.chmod(remote, WRITABLE_MODE)
 
 
 def test_sync_local_to_remote_handles_collision(tmp_path, monkeypatch):
