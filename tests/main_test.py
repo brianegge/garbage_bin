@@ -50,9 +50,19 @@ def test_on_connect_publishes_status_and_process_state(mocker):
     client.publish.assert_any_call("garagecam/process/state", "running", retain=True)
 
 
-def test_on_disconnect_sets_running_false(mocker):
-    import garbage_bin.main as main_module
+def test_on_disconnect_clean(mocker, caplog):
+    """Clean disconnect (reason_code 0) logs at info level."""
+    import logging
 
-    main_module.RUNNING = True
-    on_disconnect(mocker.MagicMock(), None, None, 0, None)
-    assert main_module.RUNNING is False
+    with caplog.at_level(logging.INFO):
+        on_disconnect(mocker.MagicMock(), None, None, 0, None)
+    assert "mqtt disconnected (clean)" in caplog.text
+
+
+def test_on_disconnect_unexpected(mocker, caplog):
+    """Unexpected disconnect logs a warning and does not kill the process."""
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        on_disconnect(mocker.MagicMock(), None, None, 7, None)
+    assert "auto-reconnect" in caplog.text

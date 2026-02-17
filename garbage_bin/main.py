@@ -19,8 +19,6 @@ from ultralytics import YOLO
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
 
-RUNNING = True
-
 
 class GracefulKiller:
     """
@@ -63,9 +61,12 @@ def on_connect(client, userdata, flags, reason_code, properties):
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
-    log.info(f"mqtt disconnected reason: {reason_code}")
-    global RUNNING
-    RUNNING = False
+    if reason_code == 0:
+        log.info("mqtt disconnected (clean)")
+    else:
+        log.warning(
+            "mqtt disconnected unexpectedly: %s — will auto-reconnect", reason_code
+        )
 
 
 def on_message(mqtt_client, obj, msg):
@@ -158,7 +159,7 @@ def main():
     sd.notify("READY=1")
     sd.notify("STATUS=Running")
     killer = GracefulKiller()
-    while RUNNING and not killer.kill_now:
+    while not killer.kill_now:
         try:
             start = time.time()
             objects, img = detectframe(model, get_image(config["camera"]))
@@ -205,9 +206,12 @@ def main():
             )
         except Exception as e:
             log.warning("Failed to sync local files: %s", e)
-    mqtt_client.publish("garagecam/process/state", "stopped", retain=True)
-    publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
-    publish_result.wait_for_publish()
+    try:
+        mqtt_client.publish("garagecam/process/state", "stopped", retain=True)
+        publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
+        publish_result.wait_for_publish(timeout=5)
+    except (RuntimeError, ValueError, OSError) as e:
+        log.warning("Could not publish offline status: %s", e)
     mqtt_client.disconnect()  # disconnect gracefully
     mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
