@@ -2,13 +2,16 @@
 """monitor garage camera in loop"""
 
 import configparser
+import gc
 import json
 import logging
 import signal
 import sys
 import time
+from pathlib import Path
 
 import paho.mqtt.client as paho
+import psutil
 import requests.exceptions
 import sdnotify
 from detect import detectframe, get_image, sanitize, save, sync_local_to_remote
@@ -18,6 +21,31 @@ from ultralytics import YOLO
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
+
+# Health monitoring thresholds
+MEMORY_WARNING_THRESHOLD_MB = 500
+INFERENCE_TIME_WARNING_MS = 300
+HEARTBEAT_FILE = Path("/tmp/garagecam_heartbeat")
+
+
+_process = psutil.Process()
+
+
+def get_health_metrics():
+    """Get current process health metrics."""
+    return {
+        "memory_mb": round(_process.memory_info().rss / 1024 / 1024, 1),
+        "memory_percent": round(_process.memory_percent(), 1),
+    }
+
+
+def get_health_status(memory_mb, inference_ms, camera_ok):
+    """Determine overall health status."""
+    if not camera_ok:
+        return "camera_error"
+    if memory_mb > MEMORY_WARNING_THRESHOLD_MB or inference_ms > INFERENCE_TIME_WARNING_MS:
+        return "degraded"
+    return "healthy"
 
 
 class GracefulKiller:
@@ -155,17 +183,93 @@ def main():
         retain=True,
     )
 
+    # Register health sensor with Home Assistant
+    health_config = {
+        "name": "Garage Cam Health",
+        "state_topic": "garagecam/health",
+        "value_template": "{{ value_json.status }}",
+        "json_attributes_topic": "garagecam/health",
+        "uniq_id": "garagecam-health",
+        "availability_topic": lwt,
+    }
+    mqtt_client.publish(
+        "homeassistant/sensor/garagecam_health/config",
+        json.dumps(health_config),
+        retain=True,
+    )
+
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
     sd.notify("READY=1")
     sd.notify("STATUS=Running")
     killer = GracefulKiller()
+
+    # Health monitoring state
+    cycle_count = 0
+    inference_times = []
+    camera_ok = True
+    img = None
+
     while not killer.kill_now:
+        start = time.time()
         try:
-            start = time.time()
+            if img is not None:
+                img.close()
+                img = None
             objects, img = detectframe(model, get_image(config["camera"]))
-            sd.notify("WATCHDOG=1")
+            inference_ms = int((time.time() - start) * 1000)
+            inference_times.append(inference_ms)
+            camera_ok = True
+
+            # Track inference time spikes
+            if len(inference_times) > 1:
+                avg_inference = sum(inference_times[-10:]) / min(len(inference_times), 10)
+                if inference_ms > avg_inference * 1.5 and inference_ms > INFERENCE_TIME_WARNING_MS:
+                    log.warning(
+                        "Inference time spike: %dms (avg: %.0fms)",
+                        inference_ms,
+                        avg_inference,
+                    )
+
+            # Keep only recent inference times
+            if len(inference_times) > 100:
+                inference_times = inference_times[-50:]
+
+            # Log health metrics periodically (every 10 cycles, ~2.5 minutes)
+            cycle_count += 1
+            if cycle_count % 10 == 0:
+                metrics = get_health_metrics()
+                log.info(
+                    "Health: memory=%.1fMB (%.1f%%), inference=%dms",
+                    metrics["memory_mb"],
+                    metrics["memory_percent"],
+                    inference_ms,
+                )
+
+                # Force garbage collection if memory is high
+                if metrics["memory_mb"] > MEMORY_WARNING_THRESHOLD_MB:
+                    log.warning(
+                        "Memory usage high (%.1fMB), forcing garbage collection",
+                        metrics["memory_mb"],
+                    )
+                    gc.collect()
+                    metrics_after = get_health_metrics()
+                    log.info(
+                        "After GC: memory=%.1fMB (%.1f%%)",
+                        metrics_after["memory_mb"],
+                        metrics_after["memory_percent"],
+                    )
+
+                # Publish health status to MQTT
+                health_payload = {
+                    "memory_mb": metrics["memory_mb"],
+                    "inference_ms": inference_ms,
+                    "status": get_health_status(metrics["memory_mb"], inference_ms, camera_ok),
+                }
+                mqtt_client.publish("garagecam/health", json.dumps(health_payload))
+
             if "person" in objects and objects["person"] > 0.6:
                 log.info("Skipping while person is in garage")
+                gc.collect()
                 continue
             if objects["something"] < 0.1:
                 log.info("Nothing is in garage")
@@ -188,15 +292,23 @@ def main():
                         command.upper(),
                         retain=True,
                     )
-            delay = 15.0 - (time.time() - start)
-            if delay > 0.0:
-                time.sleep(delay)
+
+            # Run garbage collection after each cycle to prevent memory buildup
+            gc.collect()
         except UnidentifiedImageError:
-            pass
+            camera_ok = False
+            log.warning("Failed to decode image from camera")
         except requests.exceptions.RequestException as e:
+            camera_ok = False
             log.warning("Camera connection error: %s", e)
         except KeyboardInterrupt:
             break
+        finally:
+            sd.notify("WATCHDOG=1")
+            HEARTBEAT_FILE.touch()
+            delay = 15.0 - (time.time() - start)
+            if delay > 0.0:
+                time.sleep(delay)
         try:
             nfs_ok = sync_local_to_remote(config["file"]["path"])
             mqtt_client.publish(

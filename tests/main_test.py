@@ -3,6 +3,7 @@ import configparser
 import pytest
 
 from garbage_bin.main import (
+    get_health_status,
     get_section,
     graceful_shutdown,
     load_config,
@@ -97,3 +98,24 @@ def test_graceful_shutdown_handles_publish_failure(mocker, caplog):
     assert "Could not publish offline status" in caplog.text
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
+
+
+def test_get_health_status_healthy():
+    assert get_health_status(200, 100, True) == "healthy"
+
+
+def test_get_health_status_camera_error():
+    assert get_health_status(200, 100, False) == "camera_error"
+
+
+def test_get_health_status_degraded_memory():
+    assert get_health_status(600, 100, True) == "degraded"
+
+
+def test_get_health_status_degraded_inference():
+    assert get_health_status(200, 400, True) == "degraded"
+
+
+def test_get_health_status_camera_error_takes_priority():
+    """Camera error takes priority over degraded metrics."""
+    assert get_health_status(600, 400, False) == "camera_error"
