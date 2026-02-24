@@ -38,4 +38,7 @@ COPY . /app
 
 RUN uv sync --no-dev
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["uv", "run", "python3", "garbage_bin/healthcheck.py"]
+
 CMD ["uv", "run", "python3", "garbage_bin/main.py"]

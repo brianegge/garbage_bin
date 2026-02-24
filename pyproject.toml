@@ -12,6 +12,7 @@ dependencies = [
     "paho-mqtt>=2.1.0",
     "requests>=2.32.3",
     "opencv-python-headless>=4.10.0.84",
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]

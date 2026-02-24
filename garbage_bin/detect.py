@@ -7,12 +7,22 @@ from datetime import date, datetime
 from io import BytesIO
 
 import requests
+import torch
 from PIL import Image
 from requests.auth import HTTPDigestAuth
 
 LOCAL_FALLBACK = "/data/local"
 
-# from flask import g
+# Module-level session for connection reuse
+_session = None
+
+
+def get_session():
+    """Get or create a reusable HTTP session."""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+    return _session
 
 
 def sanitize(j: dict[str, any]) -> dict[str, any]:
@@ -116,7 +126,7 @@ def sync_local_to_remote(remote_path):
 
 
 def get_image(camera, timeout=60):
-    session = requests.Session()
+    session = get_session()
     session.auth = HTTPDigestAuth(camera["user"], camera["password"])
     # curl -v --digest --user "admin:Password1"  "http://garage-cam.home/cgi-bin/snapshot.cgi" -o capture/garage.jpg
     url = f"http://{camera['host']}/cgi-bin/snapshot.cgi"
@@ -129,12 +139,10 @@ def get_image(camera, timeout=60):
 
 
 def detectframe(model, img):
-    # read image file string data
-    # url = "http://garage:8085/?action=snapshot"
-    # img = imageio.imread(url)
     if img.mode != "RGB":
         img = img.convert("RGB")
-    results = model(img)
+    with torch.no_grad():
+        results = model(img)
     boxes = results[0].boxes
     maxes = {}
     something = -1.0
@@ -149,4 +157,6 @@ def detectframe(model, img):
     o = dict(filter(lambda item: item[1] > 0.4, maxes.items()))
     o["something"] = something
     o = sanitize(o)
+    # Explicitly free YOLO results and their tensors
+    del boxes, results
     return o, img
