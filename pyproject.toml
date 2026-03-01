@@ -5,7 +5,7 @@ description = ""
 authors = [{ name = "Brian Egge", email = "brianegge@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "ultralytics==8.4.14",
+    "ultralytics==8.4.19",
     "pillow>=12.0.0",
     "imageio>=2.35.1",
     "sdnotify>=0.3.2",
