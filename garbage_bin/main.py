@@ -105,7 +105,7 @@ def connect_mqtt(mqtt_client, host, port, max_retries=6, initial_delay=1):
 
     Retries up to max_retries times with exponential backoff starting at
     initial_delay seconds. Default of 6 retries with 1s initial delay covers
-    about 60 seconds of broker downtime (1+2+4+8+16+32=63s).
+    about 60 seconds of broker downtime (1+2+4+8+16+30=61s, with each delay capped at 30s).
     """
     delay = initial_delay
     for attempt in range(1, max_retries + 1):
