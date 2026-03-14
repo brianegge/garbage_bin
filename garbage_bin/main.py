@@ -43,7 +43,10 @@ def get_health_status(memory_mb, inference_ms, camera_ok):
     """Determine overall health status."""
     if not camera_ok:
         return "camera_error"
-    if memory_mb > MEMORY_WARNING_THRESHOLD_MB or inference_ms > INFERENCE_TIME_WARNING_MS:
+    if (
+        memory_mb > MEMORY_WARNING_THRESHOLD_MB
+        or inference_ms > INFERENCE_TIME_WARNING_MS
+    ):
         return "degraded"
     return "healthy"
 
@@ -97,6 +100,32 @@ def on_disconnect(client, userdata, flags, reason_code, properties):
         )
 
 
+def connect_mqtt(mqtt_client, host, port, max_retries=6, initial_delay=1):
+    """Connect to MQTT broker with retries and exponential backoff.
+
+    Retries up to max_retries times with exponential backoff starting at
+    initial_delay seconds. Default of 6 retries with 1s initial delay covers
+    about 60 seconds of broker downtime (1+2+4+8+16+30=61s, with each delay capped at 30s).
+    """
+    delay = initial_delay
+    for attempt in range(1, max_retries + 1):
+        try:
+            mqtt_client.connect(host, port)
+            return
+        except OSError as e:
+            if attempt == max_retries:
+                raise
+            log.warning(
+                "MQTT connect attempt %d/%d failed: %s — retrying in %ds",
+                attempt,
+                max_retries,
+                e,
+                delay,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, 30)
+
+
 def on_message(mqtt_client, obj, msg):
     log.info("on_message()")
 
@@ -137,10 +166,11 @@ def main():
     mqtt_client.on_disconnect = on_disconnect
     mqtt_client.on_message = on_message
     mqtt_client.username_pw_set(mqtt_config["user"], mqtt_config["password"])
+    mqtt_client.reconnect_delay_set(min_delay=1, max_delay=10)
     log.info(
         "Connecting to MQTT broker at %s:%s", mqtt_config["host"], mqtt_config["port"]
     )
-    mqtt_client.connect(mqtt_config["host"], int(mqtt_config["port"]))
+    connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
     mqtt_client.subscribe("test")  # get on connect messages
     mqtt_client.loop_start()
     devices = list(
@@ -222,8 +252,13 @@ def main():
 
             # Track inference time spikes
             if len(inference_times) > 1:
-                avg_inference = sum(inference_times[-10:]) / min(len(inference_times), 10)
-                if inference_ms > avg_inference * 1.5 and inference_ms > INFERENCE_TIME_WARNING_MS:
+                avg_inference = sum(inference_times[-10:]) / min(
+                    len(inference_times), 10
+                )
+                if (
+                    inference_ms > avg_inference * 1.5
+                    and inference_ms > INFERENCE_TIME_WARNING_MS
+                ):
                     log.warning(
                         "Inference time spike: %dms (avg: %.0fms)",
                         inference_ms,
@@ -263,7 +298,9 @@ def main():
                 health_payload = {
                     "memory_mb": metrics["memory_mb"],
                     "inference_ms": inference_ms,
-                    "status": get_health_status(metrics["memory_mb"], inference_ms, camera_ok),
+                    "status": get_health_status(
+                        metrics["memory_mb"], inference_ms, camera_ok
+                    ),
                 }
                 mqtt_client.publish("garagecam/health", json.dumps(health_payload))
 

@@ -3,6 +3,7 @@ import configparser
 import pytest
 
 from garbage_bin.main import (
+    connect_mqtt,
     get_health_status,
     get_section,
     graceful_shutdown,
@@ -98,6 +99,43 @@ def test_graceful_shutdown_handles_publish_failure(mocker, caplog):
     assert "Could not publish offline status" in caplog.text
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
+
+
+def test_connect_mqtt_succeeds_first_try(mocker):
+    client = mocker.MagicMock()
+    connect_mqtt(client, "localhost", 1883)
+    client.connect.assert_called_once_with("localhost", 1883)
+
+
+def test_connect_mqtt_retries_on_failure(mocker):
+    """Retries connection on OSError and succeeds on later attempt."""
+    mocker.patch("garbage_bin.main.time.sleep")
+    client = mocker.MagicMock()
+    client.connect.side_effect = [OSError("refused"), OSError("refused"), None]
+    connect_mqtt(client, "localhost", 1883)
+    assert client.connect.call_count == 3
+
+
+def test_connect_mqtt_raises_after_max_retries(mocker):
+    client = mocker.MagicMock()
+    client.connect.side_effect = OSError("refused")
+    mocker.patch("garbage_bin.main.time.sleep")
+    with pytest.raises(OSError, match="refused"):
+        connect_mqtt(client, "localhost", 1883, max_retries=3)
+    assert client.connect.call_count == 3
+
+
+def test_connect_mqtt_exponential_backoff(mocker):
+    """Verify sleep delays double each retry."""
+    sleep_mock = mocker.patch("garbage_bin.main.time.sleep")
+    client = mocker.MagicMock()
+    client.connect.side_effect = [OSError("fail")] * 3 + [None]
+    connect_mqtt(client, "localhost", 1883, max_retries=4, initial_delay=2)
+    assert sleep_mock.call_args_list == [
+        mocker.call(2),
+        mocker.call(4),
+        mocker.call(8),
+    ]
 
 
 def test_get_health_status_healthy():
