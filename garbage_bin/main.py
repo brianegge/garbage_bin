@@ -31,6 +31,25 @@ HEARTBEAT_FILE = Path("/tmp/garagecam_heartbeat")
 _process = psutil.Process()
 
 
+def get_version():
+    """Read version from build-time file, falling back to 'dev'."""
+    version_file = Path("/app/GIT_VERSION_TAG.txt")
+    try:
+        return version_file.read_text().strip()
+    except FileNotFoundError:
+        return "dev"
+
+
+def get_device_info():
+    """Return shared HA MQTT device block so all entities are grouped."""
+    return {
+        "identifiers": ["garagecam"],
+        "name": "Garage Camera",
+        "manufacturer": "garbage_bin",
+        "sw_version": get_version(),
+    }
+
+
 def get_health_metrics():
     """Get current process health metrics."""
     return {
@@ -173,6 +192,7 @@ def main():
     connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
     mqtt_client.subscribe("test")  # get on connect messages
     mqtt_client.loop_start()
+    device_info = get_device_info()
     devices = list(
         map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
     )
@@ -183,6 +203,7 @@ def main():
             "device_class": "presence",
             "uniq_id": f"garagecam-{device.hass_name}",
             "availability_topic": lwt,
+            "device": device_info,
         }
         mqtt_client.publish(
             f"homeassistant/binary_sensor/{device.hass_name}/config",
@@ -195,6 +216,7 @@ def main():
         "device_class": "problem",
         "uniq_id": "garagecam-nfs_storage",
         "availability_topic": lwt,
+        "device": device_info,
     }
     mqtt_client.publish(
         "homeassistant/binary_sensor/garagecam-nfs_storage/config",
@@ -206,6 +228,7 @@ def main():
         "state_topic": "garagecam/process/state",
         "uniq_id": "garagecam-process",
         "availability_topic": lwt,
+        "device": device_info,
     }
     mqtt_client.publish(
         "homeassistant/sensor/garagecam-process/config",
@@ -221,6 +244,7 @@ def main():
         "json_attributes_topic": "garagecam/health",
         "uniq_id": "garagecam-health",
         "availability_topic": lwt,
+        "device": device_info,
     }
     mqtt_client.publish(
         "homeassistant/sensor/garagecam_health/config",

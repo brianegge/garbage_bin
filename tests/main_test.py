@@ -4,8 +4,10 @@ import pytest
 
 from garbage_bin.main import (
     connect_mqtt,
+    get_device_info,
     get_health_status,
     get_section,
+    get_version,
     graceful_shutdown,
     load_config,
     on_connect,
@@ -136,6 +138,25 @@ def test_connect_mqtt_exponential_backoff(mocker):
         mocker.call(4),
         mocker.call(8),
     ]
+
+
+def test_get_version_from_file(tmp_path, mocker):
+    version_file = tmp_path / "GIT_VERSION_TAG.txt"
+    version_file.write_text("v1.2.3\n")
+    mocker.patch("garbage_bin.main.Path", return_value=version_file)
+    assert get_version() == "v1.2.3"
+
+
+def test_get_version_fallback():
+    assert get_version() == "dev"
+
+
+def test_get_device_info(mocker):
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    info = get_device_info()
+    assert info["identifiers"] == ["garagecam"]
+    assert info["name"] == "Garage Camera"
+    assert info["sw_version"] == "v1.0.0"
 
 
 def test_get_health_status_healthy():
