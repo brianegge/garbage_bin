@@ -113,7 +113,7 @@ jobs:
       - name: Build and push image
         if: steps.check_daily_limit.outputs.skip != 'true'
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
