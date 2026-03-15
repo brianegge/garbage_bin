@@ -149,7 +149,8 @@ def test_get_version_from_file(tmp_path, mocker):
     assert get_version() == "v1.2.3"
 
 
-def test_get_version_fallback():
+def test_get_version_fallback(tmp_path, mocker):
+    mocker.patch("garbage_bin.main.Path", return_value=tmp_path / "nonexistent.txt")
     assert get_version() == "dev"
 
 

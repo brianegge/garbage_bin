@@ -36,7 +36,7 @@ def get_version():
     version_file = Path("/app/GIT_VERSION_TAG.txt")
     try:
         return version_file.read_text().strip()
-    except FileNotFoundError:
+    except OSError:
         return "dev"
 
 
