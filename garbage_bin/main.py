@@ -108,6 +108,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     log.info(f"mqtt connected: {reason_code}")
     client.publish("garagecam/status", "online", retain=True)
     client.publish("garagecam/process/state", "running", retain=True)
+    client.publish("garagecam/version/state", get_version(), retain=True)
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
@@ -249,6 +250,35 @@ def main():
     mqtt_client.publish(
         "homeassistant/sensor/garagecam_health/config",
         json.dumps(health_config),
+        retain=True,
+    )
+
+    # Register status sensor (uses LWT topic for online/offline)
+    status_config = {
+        "name": "Garagecam Status",
+        "state_topic": lwt,
+        "uniq_id": "garagecam-status",
+        "entity_category": "diagnostic",
+        "device": device_info,
+    }
+    mqtt_client.publish(
+        "homeassistant/sensor/garagecam-status/config",
+        json.dumps(status_config),
+        retain=True,
+    )
+
+    # Register version sensor
+    version_config = {
+        "name": "Garagecam Version",
+        "state_topic": "garagecam/version/state",
+        "uniq_id": "garagecam-version",
+        "entity_category": "diagnostic",
+        "availability_topic": lwt,
+        "device": device_info,
+    }
+    mqtt_client.publish(
+        "homeassistant/sensor/garagecam-version/config",
+        json.dumps(version_config),
         retain=True,
     )
 

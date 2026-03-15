@@ -54,10 +54,12 @@ def test_load_config_multiple_sections(mocker):
 
 
 def test_on_connect_publishes_status_and_process_state(mocker):
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
     client = mocker.MagicMock()
     on_connect(client, None, None, 0, None)
     client.publish.assert_any_call("garagecam/status", "online", retain=True)
     client.publish.assert_any_call("garagecam/process/state", "running", retain=True)
+    client.publish.assert_any_call("garagecam/version/state", "v1.0.0", retain=True)
 
 
 def test_on_disconnect_clean(mocker, caplog):

@@ -1,0 +1,33 @@
+name: Test
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+    - name: Set up Python
+      run: uv python install 3.13
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1 libglib2.0-0
+        uv sync --extra dev
+    - name: Lint with ruff
+      run: uv run ruff check .
+    - name: Run tests
+      run: uv run pytest
