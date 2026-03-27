@@ -12,6 +12,8 @@ from garbage_bin.main import (
     load_config,
     on_connect,
     on_disconnect,
+    on_message,
+    publish_discovery,
 )
 
 
@@ -181,3 +183,59 @@ def test_get_health_status_degraded_inference():
 def test_get_health_status_camera_error_takes_priority():
     """Camera error takes priority over degraded metrics."""
     assert get_health_status(600, 400, False) == "camera_error"
+
+
+def test_publish_discovery_publishes_all_entities(mocker):
+    """publish_discovery sends discovery configs for all devices plus fixed sensors."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    client = mocker.MagicMock()
+    device1 = mocker.MagicMock()
+    device1.name = "Honda Civic"
+    device1.hass_name = "honda_civic"
+    device2 = mocker.MagicMock()
+    device2.name = "Garbage Bin"
+    device2.hass_name = "garbage_bin"
+    publish_discovery(client, [device1, device2], "garagecam/status")
+    # 2 device binary_sensors + nfs_storage + process + health + status + version = 7
+    assert client.publish.call_count == 7
+    topics = [call.args[0] for call in client.publish.call_args_list]
+    assert "homeassistant/binary_sensor/honda_civic/config" in topics
+    assert "homeassistant/binary_sensor/garbage_bin/config" in topics
+    assert "homeassistant/binary_sensor/garagecam-nfs_storage/config" in topics
+    assert "homeassistant/sensor/garagecam-process/config" in topics
+
+
+def test_on_message_ha_online_republishes(mocker):
+    """on_message re-publishes discovery when HA comes online."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    devices = [mocker.MagicMock()]
+    client._userdata = {"devices": devices, "lwt": "garagecam/status"}
+    msg = mocker.MagicMock()
+    msg.topic = "homeassistant/status"
+    msg.payload.decode.return_value = "online"
+    on_message(client, None, msg)
+    mock_publish.assert_called_once_with(client, devices, "garagecam/status")
+
+
+def test_on_message_ignores_other_topics(mocker):
+    """on_message does not republish for unrelated messages."""
+    mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    msg = mocker.MagicMock()
+    msg.topic = "some/other/topic"
+    msg.payload.decode.return_value = "hello"
+    on_message(client, None, msg)
+    mock_publish.assert_not_called()
+
+
+def test_on_message_ignores_ha_offline(mocker):
+    """on_message does not republish when HA goes offline."""
+    mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    msg = mocker.MagicMock()
+    msg.topic = "homeassistant/status"
+    msg.payload.decode.return_value = "offline"
+    on_message(client, None, msg)
+    mock_publish.assert_not_called()
