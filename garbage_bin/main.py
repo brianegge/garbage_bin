@@ -146,57 +146,9 @@ def connect_mqtt(mqtt_client, host, port, max_retries=6, initial_delay=1):
             delay = min(delay * 2, 30)
 
 
-def on_message(mqtt_client, obj, msg):
-    log.info("on_message()")
-
-
-def get_section(config, section):
-    """
-    Retrieve a section from a configuration object and validate its existence.
-
-    Args:
-        config: A configparser-like object containing configuration sections
-        section (str): The name of the section to retrieve
-
-    Returns:
-        dict-like object: The configuration section if it exists
-
-    Raises:
-        ValueError: If the specified section does not exist in the config
-
-    Ensure that the specified section is present in the config.
-    """
-    if not config.has_section(section):
-        raise ValueError(f"Missing required section: {section}")
-    return config[section]
-
-
-def main():
-    sd = sdnotify.SystemdNotifier()
-    sd.notify("STATUS=Loading")
-    model = YOLO("best.pt")  # pretrained YOLOv8n model
-    config = load_config()
-    mqtt_config = get_section(config, "mqtt")
-    lwt = "garagecam/status"
-    mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam")
-    mqtt_client.will_set(lwt, "offline", retain=True)
-    mqtt_client.enable_logger(logger=log)
-    mqtt_client.on_publish = on_publish
-    mqtt_client.on_connect = on_connect
-    mqtt_client.on_disconnect = on_disconnect
-    mqtt_client.on_message = on_message
-    mqtt_client.username_pw_set(mqtt_config["user"], mqtt_config["password"])
-    mqtt_client.reconnect_delay_set(min_delay=1, max_delay=10)
-    log.info(
-        "Connecting to MQTT broker at %s:%s", mqtt_config["host"], mqtt_config["port"]
-    )
-    connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
-    mqtt_client.subscribe("test")  # get on connect messages
-    mqtt_client.loop_start()
+def publish_discovery(mqtt_client, devices, lwt):
+    """Publish Home Assistant MQTT discovery configs for all entities."""
     device_info = get_device_info()
-    devices = list(
-        map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
-    )
     for device in devices:
         j = {
             "name": device.name,
@@ -236,8 +188,6 @@ def main():
         json.dumps(process_state_config),
         retain=True,
     )
-
-    # Register health sensor with Home Assistant
     health_config = {
         "name": "Garage Cam Health",
         "state_topic": "garagecam/health",
@@ -252,8 +202,6 @@ def main():
         json.dumps(health_config),
         retain=True,
     )
-
-    # Register status sensor (uses LWT topic for online/offline)
     status_config = {
         "name": "Garagecam Status",
         "state_topic": lwt,
@@ -266,8 +214,6 @@ def main():
         json.dumps(status_config),
         retain=True,
     )
-
-    # Register version sensor
     version_config = {
         "name": "Garagecam Version",
         "state_topic": "garagecam/version/state",
@@ -281,6 +227,67 @@ def main():
         json.dumps(version_config),
         retain=True,
     )
+    log.info("Published discovery configs for %d devices", len(devices))
+
+
+def on_message(mqtt_client, userdata, msg):
+    if msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
+        log.info("Home Assistant came online, re-publishing discovery configs")
+        publish_discovery(
+            mqtt_client, userdata["devices"], userdata["lwt"]
+        )
+    else:
+        log.info("on_message(%s, %s)", msg.topic, msg.payload.decode())
+
+
+def get_section(config, section):
+    """
+    Retrieve a section from a configuration object and validate its existence.
+
+    Args:
+        config: A configparser-like object containing configuration sections
+        section (str): The name of the section to retrieve
+
+    Returns:
+        dict-like object: The configuration section if it exists
+
+    Raises:
+        ValueError: If the specified section does not exist in the config
+
+    Ensure that the specified section is present in the config.
+    """
+    if not config.has_section(section):
+        raise ValueError(f"Missing required section: {section}")
+    return config[section]
+
+
+def main():
+    sd = sdnotify.SystemdNotifier()
+    sd.notify("STATUS=Loading")
+    model = YOLO("best.pt")  # pretrained YOLOv8n model
+    config = load_config()
+    mqtt_config = get_section(config, "mqtt")
+    lwt = "garagecam/status"
+    devices = list(
+        map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
+    )
+    mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam",
+                              userdata={"devices": devices, "lwt": lwt})
+    mqtt_client.will_set(lwt, "offline", retain=True)
+    mqtt_client.enable_logger(logger=log)
+    mqtt_client.on_publish = on_publish
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client.on_message = on_message
+    mqtt_client.username_pw_set(mqtt_config["user"], mqtt_config["password"])
+    mqtt_client.reconnect_delay_set(min_delay=1, max_delay=10)
+    log.info(
+        "Connecting to MQTT broker at %s:%s", mqtt_config["host"], mqtt_config["port"]
+    )
+    connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
+    mqtt_client.subscribe("homeassistant/status")
+    mqtt_client.loop_start()
+    publish_discovery(mqtt_client, devices, lwt)
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
     sd.notify("READY=1")

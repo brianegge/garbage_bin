@@ -10,8 +10,11 @@ from garbage_bin.main import (
     get_version,
     graceful_shutdown,
     load_config,
+    main,
     on_connect,
     on_disconnect,
+    on_message,
+    publish_discovery,
 )
 
 
@@ -181,3 +184,180 @@ def test_get_health_status_degraded_inference():
 def test_get_health_status_camera_error_takes_priority():
     """Camera error takes priority over degraded metrics."""
     assert get_health_status(600, 400, False) == "camera_error"
+
+
+def test_publish_discovery_publishes_all_entities(mocker):
+    """publish_discovery sends discovery configs for all devices plus fixed sensors."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    client = mocker.MagicMock()
+    device1 = mocker.MagicMock()
+    device1.name = "Honda Civic"
+    device1.hass_name = "honda_civic"
+    device2 = mocker.MagicMock()
+    device2.name = "Garbage Bin"
+    device2.hass_name = "garbage_bin"
+    publish_discovery(client, [device1, device2], "garagecam/status")
+    topics = [call.args[0] for call in client.publish.call_args_list]
+    assert "homeassistant/binary_sensor/honda_civic/config" in topics
+    assert "homeassistant/binary_sensor/garbage_bin/config" in topics
+    assert "homeassistant/binary_sensor/garagecam-nfs_storage/config" in topics
+    assert "homeassistant/sensor/garagecam-process/config" in topics
+
+
+def test_publish_discovery_payload_contents(mocker):
+    """Verify the JSON payloads contain expected fields and values."""
+    import json
+
+    mocker.patch("garbage_bin.main.get_version", return_value="v2.0.0")
+    client = mocker.MagicMock()
+    device = mocker.MagicMock()
+    device.name = "Honda Civic"
+    device.hass_name = "honda_civic"
+    publish_discovery(client, [device], "garagecam/status")
+    payloads = {
+        call.args[0]: json.loads(call.args[1])
+        for call in client.publish.call_args_list
+    }
+    # Binary sensor for device
+    civic = payloads["homeassistant/binary_sensor/honda_civic/config"]
+    assert civic["name"] == "Honda Civic"
+    assert civic["state_topic"] == "honda_civic/state"
+    assert civic["device_class"] == "presence"
+    assert civic["uniq_id"] == "garagecam-honda_civic"
+    assert civic["availability_topic"] == "garagecam/status"
+    assert civic["device"]["sw_version"] == "v2.0.0"
+    # NFS storage
+    nfs = payloads["homeassistant/binary_sensor/garagecam-nfs_storage/config"]
+    assert nfs["device_class"] == "problem"
+    assert nfs["uniq_id"] == "garagecam-nfs_storage"
+    # Process sensor
+    proc = payloads["homeassistant/sensor/garagecam-process/config"]
+    assert proc["state_topic"] == "garagecam/process/state"
+    assert proc["uniq_id"] == "garagecam-process"
+    # Health sensor
+    health = payloads["homeassistant/sensor/garagecam_health/config"]
+    assert health["value_template"] == "{{ value_json.status }}"
+    assert health["json_attributes_topic"] == "garagecam/health"
+    assert health["uniq_id"] == "garagecam-health"
+    # Status sensor
+    status = payloads["homeassistant/sensor/garagecam-status/config"]
+    assert status["state_topic"] == "garagecam/status"
+    assert status["entity_category"] == "diagnostic"
+    assert status["uniq_id"] == "garagecam-status"
+    # Version sensor
+    version = payloads["homeassistant/sensor/garagecam-version/config"]
+    assert version["state_topic"] == "garagecam/version/state"
+    assert version["entity_category"] == "diagnostic"
+    assert version["uniq_id"] == "garagecam-version"
+    assert version["availability_topic"] == "garagecam/status"
+    # All publishes use retain=True
+    for call in client.publish.call_args_list:
+        assert call.kwargs["retain"] is True
+
+
+def test_publish_discovery_empty_devices(mocker):
+    """publish_discovery still publishes fixed sensors with no devices."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    client = mocker.MagicMock()
+    publish_discovery(client, [], "garagecam/status")
+    topics = [call.args[0] for call in client.publish.call_args_list]
+    # No device binary sensors, but fixed sensors still published
+    assert "homeassistant/binary_sensor/garagecam-nfs_storage/config" in topics
+    assert "homeassistant/sensor/garagecam-process/config" in topics
+    assert "homeassistant/sensor/garagecam_health/config" in topics
+    assert "homeassistant/sensor/garagecam-status/config" in topics
+    assert "homeassistant/sensor/garagecam-version/config" in topics
+
+
+def test_on_message_ha_online_republishes(mocker):
+    """on_message re-publishes discovery when HA comes online."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    devices = [mocker.MagicMock()]
+    userdata = {"devices": devices, "lwt": "garagecam/status"}
+    msg = mocker.MagicMock()
+    msg.topic = "homeassistant/status"
+    msg.payload.decode.return_value = "online"
+    on_message(client, userdata, msg)
+    mock_publish.assert_called_once_with(client, devices, "garagecam/status")
+
+
+def test_on_message_ha_online_end_to_end(mocker):
+    """on_message calls publish_discovery end-to-end without mocking it."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    client = mocker.MagicMock()
+    device = mocker.MagicMock()
+    device.name = "Test Device"
+    device.hass_name = "test_device"
+    userdata = {"devices": [device], "lwt": "garagecam/status"}
+    msg = mocker.MagicMock()
+    msg.topic = "homeassistant/status"
+    msg.payload.decode.return_value = "online"
+    on_message(client, userdata, msg)
+    topics = [call.args[0] for call in client.publish.call_args_list]
+    assert "homeassistant/binary_sensor/test_device/config" in topics
+    assert "homeassistant/sensor/garagecam-version/config" in topics
+
+
+def test_on_message_ignores_other_topics(mocker):
+    """on_message does not republish for unrelated messages."""
+    mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    msg = mocker.MagicMock()
+    msg.topic = "some/other/topic"
+    msg.payload.decode.return_value = "hello"
+    on_message(client, None, msg)
+    mock_publish.assert_not_called()
+
+
+def test_on_message_ignores_ha_offline(mocker):
+    """on_message does not republish when HA goes offline."""
+    mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    msg = mocker.MagicMock()
+    msg.topic = "homeassistant/status"
+    msg.payload.decode.return_value = "offline"
+    on_message(client, None, msg)
+    mock_publish.assert_not_called()
+
+
+def test_main_setup_and_immediate_exit(mocker):
+    """Exercise main() setup: MQTT wiring, subscribe, and publish_discovery call."""
+    mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
+    mocker.patch("garbage_bin.main.YOLO")
+    config = configparser.ConfigParser()
+    config.add_section("mqtt")
+    config.set("mqtt", "host", "broker.local")
+    config.set("mqtt", "port", "1883")
+    config.set("mqtt", "user", "testuser")
+    config.set("mqtt", "password", "testpass")
+    config.add_section("camera")
+    config.add_section("file")
+    config.set("file", "path", "/tmp")
+    mocker.patch("garbage_bin.main.load_config", return_value=config)
+    mock_client_instance = mocker.MagicMock()
+    mock_client_cls = mocker.patch(
+        "garbage_bin.main.paho.Client", return_value=mock_client_instance
+    )
+    mocker.patch("garbage_bin.main.connect_mqtt")
+    mock_publish_disc = mocker.patch("garbage_bin.main.publish_discovery")
+    # Make the main loop exit immediately
+    killer = mocker.patch("garbage_bin.main.GracefulKiller")
+    killer.return_value.kill_now = True
+    mocker.patch("garbage_bin.main.graceful_shutdown")
+
+    main()
+
+    # Verify Client was created with userdata containing devices and lwt
+    call_kwargs = mock_client_cls.call_args
+    assert "userdata" in call_kwargs.kwargs
+    assert "devices" in call_kwargs.kwargs["userdata"]
+    assert call_kwargs.kwargs["userdata"]["lwt"] == "garagecam/status"
+    assert len(call_kwargs.kwargs["userdata"]["devices"]) == 3
+    # Verify subscribed to homeassistant/status
+    mock_client_instance.subscribe.assert_called_once_with("homeassistant/status")
+    # Verify publish_discovery was called
+    mock_publish_disc.assert_called_once()
+    # Verify on_message callback was wired
+    assert mock_client_instance.on_message is not None
