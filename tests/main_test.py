@@ -10,6 +10,7 @@ from garbage_bin.main import (
     get_version,
     graceful_shutdown,
     load_config,
+    main,
     on_connect,
     on_disconnect,
     on_message,
@@ -319,3 +320,44 @@ def test_on_message_ignores_ha_offline(mocker):
     msg.payload.decode.return_value = "offline"
     on_message(client, None, msg)
     mock_publish.assert_not_called()
+
+
+def test_main_setup_and_immediate_exit(mocker):
+    """Exercise main() setup: MQTT wiring, subscribe, and publish_discovery call."""
+    mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
+    mocker.patch("garbage_bin.main.YOLO")
+    config = configparser.ConfigParser()
+    config.add_section("mqtt")
+    config.set("mqtt", "host", "broker.local")
+    config.set("mqtt", "port", "1883")
+    config.set("mqtt", "user", "testuser")
+    config.set("mqtt", "password", "testpass")
+    config.add_section("camera")
+    config.add_section("file")
+    config.set("file", "path", "/tmp")
+    mocker.patch("garbage_bin.main.load_config", return_value=config)
+    mock_client_instance = mocker.MagicMock()
+    mock_client_cls = mocker.patch(
+        "garbage_bin.main.paho.Client", return_value=mock_client_instance
+    )
+    mocker.patch("garbage_bin.main.connect_mqtt")
+    mock_publish_disc = mocker.patch("garbage_bin.main.publish_discovery")
+    # Make the main loop exit immediately
+    killer = mocker.patch("garbage_bin.main.GracefulKiller")
+    killer.return_value.kill_now = True
+    mocker.patch("garbage_bin.main.graceful_shutdown")
+
+    main()
+
+    # Verify Client was created with userdata containing devices and lwt
+    call_kwargs = mock_client_cls.call_args
+    assert "userdata" in call_kwargs.kwargs
+    assert "devices" in call_kwargs.kwargs["userdata"]
+    assert call_kwargs.kwargs["userdata"]["lwt"] == "garagecam/status"
+    assert len(call_kwargs.kwargs["userdata"]["devices"]) == 3
+    # Verify subscribed to homeassistant/status
+    mock_client_instance.subscribe.assert_called_once_with("homeassistant/status")
+    # Verify publish_discovery was called
+    mock_publish_disc.assert_called_once()
+    # Verify on_message callback was wired
+    assert mock_client_instance.on_message is not None
