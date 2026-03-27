@@ -230,11 +230,11 @@ def publish_discovery(mqtt_client, devices, lwt):
     log.info("Published discovery configs for %d devices", len(devices))
 
 
-def on_message(mqtt_client, obj, msg):
+def on_message(mqtt_client, userdata, msg):
     if msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
         log.info("Home Assistant came online, re-publishing discovery configs")
         publish_discovery(
-            mqtt_client, mqtt_client._userdata["devices"], mqtt_client._userdata["lwt"]
+            mqtt_client, userdata["devices"], userdata["lwt"]
         )
     else:
         log.info("on_message(%s, %s)", msg.topic, msg.payload.decode())

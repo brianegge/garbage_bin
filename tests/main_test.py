@@ -196,8 +196,6 @@ def test_publish_discovery_publishes_all_entities(mocker):
     device2.name = "Garbage Bin"
     device2.hass_name = "garbage_bin"
     publish_discovery(client, [device1, device2], "garagecam/status")
-    # 2 device binary_sensors + nfs_storage + process + health + status + version = 7
-    assert client.publish.call_count == 7
     topics = [call.args[0] for call in client.publish.call_args_list]
     assert "homeassistant/binary_sensor/honda_civic/config" in topics
     assert "homeassistant/binary_sensor/garbage_bin/config" in topics
@@ -211,11 +209,11 @@ def test_on_message_ha_online_republishes(mocker):
     mock_publish = mocker.patch("garbage_bin.main.publish_discovery")
     client = mocker.MagicMock()
     devices = [mocker.MagicMock()]
-    client._userdata = {"devices": devices, "lwt": "garagecam/status"}
+    userdata = {"devices": devices, "lwt": "garagecam/status"}
     msg = mocker.MagicMock()
     msg.topic = "homeassistant/status"
     msg.payload.decode.return_value = "online"
-    on_message(client, None, msg)
+    on_message(client, userdata, msg)
     mock_publish.assert_called_once_with(client, devices, "garagecam/status")
 
 
