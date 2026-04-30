@@ -2,6 +2,7 @@
 """monitor garage camera in loop"""
 
 import configparser
+import faulthandler
 import gc
 import json
 import logging
@@ -233,9 +234,7 @@ def publish_discovery(mqtt_client, devices, lwt):
 def on_message(mqtt_client, userdata, msg):
     if msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
         log.info("Home Assistant came online, re-publishing discovery configs")
-        publish_discovery(
-            mqtt_client, userdata["devices"], userdata["lwt"]
-        )
+        publish_discovery(mqtt_client, userdata["devices"], userdata["lwt"])
     else:
         log.info("on_message(%s, %s)", msg.topic, msg.payload.decode())
 
@@ -262,6 +261,11 @@ def get_section(config, section):
 
 
 def main():
+    # Dump all thread tracebacks to stderr if a loop iteration hangs longer
+    # than the systemd watchdog (5 min) is about to allow. Gives us a stack
+    # trace of the wedged thread before SIGABRT.
+    faulthandler.enable()
+
     sd = sdnotify.SystemdNotifier()
     sd.notify("STATUS=Loading")
     model = YOLO("best.pt")  # pretrained YOLOv8n model
@@ -271,8 +275,11 @@ def main():
     devices = list(
         map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
     )
-    mqtt_client = paho.Client(paho.CallbackAPIVersion.VERSION2, "garage-cam",
-                              userdata={"devices": devices, "lwt": lwt})
+    mqtt_client = paho.Client(
+        paho.CallbackAPIVersion.VERSION2,
+        "garage-cam",
+        userdata={"devices": devices, "lwt": lwt},
+    )
     mqtt_client.will_set(lwt, "offline", retain=True)
     mqtt_client.enable_logger(logger=log)
     mqtt_client.on_publish = on_publish
@@ -302,6 +309,7 @@ def main():
 
     while not killer.kill_now:
         start = time.time()
+        faulthandler.dump_traceback_later(240, repeat=False)
         try:
             if img is not None:
                 img.close()
@@ -416,6 +424,7 @@ def main():
             )
         except Exception as e:
             log.warning("Failed to sync local files: %s", e)
+        faulthandler.cancel_dump_traceback_later()
     graceful_shutdown(mqtt_client, lwt, sd)
 
 
