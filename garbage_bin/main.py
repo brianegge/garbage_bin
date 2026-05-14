@@ -297,7 +297,6 @@ def main():
     connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
     mqtt_client.subscribe("homeassistant/status")
     mqtt_client.loop_start()
-    publish_discovery(mqtt_client, devices, lwt)
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
     sd.notify("READY=1")

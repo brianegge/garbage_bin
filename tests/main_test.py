@@ -65,6 +65,25 @@ def test_on_connect_publishes_status_and_process_state(mocker):
     client.publish.assert_any_call("garagecam/version/state", "v1.0.0", retain=True)
 
 
+def test_on_connect_republishes_discovery_when_userdata_set(mocker):
+    """on_connect republishes discovery so HA recovers from broker restarts."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    spy = mocker.patch("garbage_bin.main.publish_discovery")
+    client = mocker.MagicMock()
+    devices = [mocker.MagicMock()]
+    userdata = {"devices": devices, "lwt": "garagecam/status"}
+    on_connect(client, userdata, None, 0, None)
+    spy.assert_called_once_with(client, devices, "garagecam/status")
+
+
+def test_on_connect_skips_discovery_when_userdata_missing(mocker):
+    """A None userdata must not raise (defensive guard for any first-connect race)."""
+    mocker.patch("garbage_bin.main.get_version", return_value="v1.0.0")
+    spy = mocker.patch("garbage_bin.main.publish_discovery")
+    on_connect(mocker.MagicMock(), None, None, 0, None)
+    spy.assert_not_called()
+
+
 def test_on_disconnect_clean(mocker, caplog):
     """Clean disconnect (reason_code 0) logs at info level."""
     import logging
@@ -323,7 +342,7 @@ def test_on_message_ignores_ha_offline(mocker):
 
 
 def test_main_setup_and_immediate_exit(mocker):
-    """Exercise main() setup: MQTT wiring, subscribe, and publish_discovery call."""
+    """Exercise main() setup: MQTT wiring, subscribe, and callback registration."""
     mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
     mocker.patch("garbage_bin.main.YOLO")
     config = configparser.ConfigParser()
@@ -357,7 +376,7 @@ def test_main_setup_and_immediate_exit(mocker):
     assert len(call_kwargs.kwargs["userdata"]["devices"]) == 3
     # Verify subscribed to homeassistant/status
     mock_client_instance.subscribe.assert_called_once_with("homeassistant/status")
-    # Verify publish_discovery was called
-    mock_publish_disc.assert_called_once()
+    # Discovery is now driven by on_connect, not main(), so main() should not call it directly.
+    mock_publish_disc.assert_not_called()
     # Verify on_message callback was wired
     assert mock_client_instance.on_message is not None
