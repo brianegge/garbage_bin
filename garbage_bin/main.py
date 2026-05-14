@@ -110,6 +110,9 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.publish("garagecam/status", "online", retain=True)
     client.publish("garagecam/process/state", "running", retain=True)
     client.publish("garagecam/version/state", get_version(), retain=True)
+    # Republish discovery so HA recovers from a broker restart that drops retained messages.
+    if userdata:
+        publish_discovery(client, userdata["devices"], userdata["lwt"])
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
