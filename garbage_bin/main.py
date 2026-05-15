@@ -110,6 +110,9 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.publish("garagecam/status", "online", retain=True)
     client.publish("garagecam/process/state", "running", retain=True)
     client.publish("garagecam/version/state", get_version(), retain=True)
+    # Republish discovery so HA recovers from a broker restart that drops retained messages.
+    if userdata:
+        publish_discovery(client, userdata["devices"], userdata["lwt"])
 
 
 def on_disconnect(client, userdata, flags, reason_code, properties):
@@ -294,7 +297,6 @@ def main():
     connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
     mqtt_client.subscribe("homeassistant/status")
     mqtt_client.loop_start()
-    publish_discovery(mqtt_client, devices, lwt)
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
     sd.notify("READY=1")
