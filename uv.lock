@@ -564,7 +564,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -688,7 +688,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sdnotify", specifier = ">=0.3.2" },
-    { name = "ultralytics", specifier = "==8.4.61" },
+    { name = "ultralytics", specifier = "==8.4.67" },
 ]
 provides-extras = ["dev"]
 
@@ -1345,6 +1345,15 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/e1/cdc1797eadf82d3a9a575a19b33fdc871a97edbec42c00b5b5e914f4aff4/nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:4dca476c50bf4780d46cd0bfbd82e2bc10a08e4fef7950917ce8d7578d22a23f", size = 221051344, upload-time = "2025-09-05T18:49:51.289Z" },
     { url = "https://files.pythonhosted.org/packages/34/7d/2661f2fb3ac4302f3a246f5fc030213ac60c1fe0bce84f9783dbd831dbb7/nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:786ce87568c303fadb5afcc7102d454cd3040d75f6f8626f5db460d1871f4dd0", size = 170148586, upload-time = "2025-09-05T18:50:50.248Z" },
+]
+
+[[package]]
+name = "nvidia-ml-py"
+version = "13.610.43"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/b5/a8fbc356f768fa5c9cfd646668fd7d34bf55bdd1c6e20754642a64d930d4/nvidia_ml_py-13.610.43.tar.gz", hash = "sha256:65437eb73d68d0c62c931ca4d45038472faff03bd0b8729abba4b899f70d60f2", size = 52109, upload-time = "2026-06-01T18:54:08.829Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/45/caa600acfab94560807a20a64b5830d2cd3c3202b7f1328644d70b7d6bd8/nvidia_ml_py-13.610.43-py3-none-any.whl", hash = "sha256:f13c72698edef492f985cc225f14faafe68ae065a2e407f45bdf6f4b9b43fde8", size = 53163, upload-time = "2026-06-01T18:54:07.704Z" },
 ]
 
 [[package]]
@@ -2217,12 +2226,13 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.61"
+version = "8.4.67"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "nvidia-ml-py" },
     { name = "opencv-python" },
     { name = "pillow" },
     { name = "polars" },
@@ -2235,9 +2245,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/e6/2cd786a0148718ea619fc4a61b47ee986d6732c6a13596c375d1c8738c92/ultralytics-8.4.61.tar.gz", hash = "sha256:5ffe350c2e11d2b4794794e0debb61d61ed798f918028e54c4355c6b3011e735", size = 1072272, upload-time = "2026-06-07T08:27:22.846Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/1a/44d70adc4913c461416477666be1066b3440b201b4cb390561bdded254ee/ultralytics-8.4.67.tar.gz", hash = "sha256:6fa9da706fb81bddaf158945734dd0227eb3b6e2096d886eeac75d35807e2af8", size = 1106024, upload-time = "2026-06-14T00:05:03.759Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/a3/c6c71164de0b7716144cf44b8d97cc953878b9c9b58eb92f85745e7ef9e5/ultralytics-8.4.61-py3-none-any.whl", hash = "sha256:8401e83401866854d4275a08fbd28cf355bfc23f5bdacbbdfecae652c74c1286", size = 1272972, upload-time = "2026-06-07T08:27:18.149Z" },
+    { url = "https://files.pythonhosted.org/packages/55/fa/97fd7a6c400e5e8c369379fcf17d545623455c4515ff073573f37bdc4a3f/ultralytics-8.4.67-py3-none-any.whl", hash = "sha256:ecd715dc7be2ca3c88db84438d1bc9560698677877da911fd0381f5b26e891c0", size = 1315383, upload-time = "2026-06-14T00:04:59.292Z" },
 ]
 
 [[package]]
