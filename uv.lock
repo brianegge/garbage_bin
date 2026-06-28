@@ -678,7 +678,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sdnotify", specifier = ">=0.3.2" },
-    { name = "ultralytics", specifier = "==8.4.80" },
+    { name = "ultralytics", specifier = "==8.4.81" },
 ]
 provides-extras = ["dev"]
 
@@ -2205,7 +2205,7 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.80"
+version = "8.4.81"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2224,9 +2224,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/4c/02420f908be763c52e1b517ac1cf68209ea24d4b3599ee2430493ede28d4/ultralytics-8.4.80.tar.gz", hash = "sha256:d9dd425c212fa1a51a83379993054ae2fa5806268ec4891412f100a159419b34", size = 1120446, upload-time = "2026-06-26T21:30:21.284Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/fa/415dfb4bb18fae9ee3d70ec868bb3f07ecc89a0c5b883d1ee26c00bf5583/ultralytics-8.4.81.tar.gz", hash = "sha256:362e254658910e000ed6b86562eacc1e8e2beea8f01143ea9182cd9b1f08a876", size = 1121073, upload-time = "2026-06-28T13:17:13.395Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d4/ef/723fab440af0c174877334084e68533c9b41f6d239b51f80e2cd6deb50fd/ultralytics-8.4.80-py3-none-any.whl", hash = "sha256:b2ce92d8fccf3588e168ac0173e137af6cbc7e9a47376ace2362bdb9b701bbf4", size = 1330722, upload-time = "2026-06-26T21:30:17.075Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/fa/b1c1132043a1755950aa649d232304fcd8b78afd803a39c626a409b8aed7/ultralytics-8.4.81-py3-none-any.whl", hash = "sha256:3a854a2165378f26c6975b4a3c1e59bd3597164c96e18b1dc0414ce07f739730", size = 1331453, upload-time = "2026-06-28T13:17:09.463Z" },
 ]
 
 [[package]]
