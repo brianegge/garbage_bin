@@ -669,7 +669,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sdnotify", specifier = ">=0.3.2" },
-    { name = "ultralytics", specifier = "==8.4.92" },
+    { name = "ultralytics", specifier = "==8.4.101" },
 ]
 provides-extras = ["dev"]
 
@@ -2193,9 +2193,10 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.92"
+version = "8.4.101"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "filelock" },
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "matplotlib", version = "3.11.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2212,9 +2213,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ab/90/4e24c0b09276177ce55c8a192ce222a2261b4a1c37649a40b195bf714f45/ultralytics-8.4.92.tar.gz", hash = "sha256:68ec4f84a52cd25ceaa8dcc8ad88fa521b094856870554f261d3a0fb8eda531d", size = 1145347, upload-time = "2026-07-10T11:54:56.373Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/2d/623b46f3e552bc4e0b710c80b29867da950409d869a90b7acae9653eb6cc/ultralytics-8.4.101.tar.gz", hash = "sha256:ee23cf028b220ecc1d3ad613d6608d8b7ff2c0ab89a2ef2bcb917d1c95c9116e", size = 1160234, upload-time = "2026-07-18T16:49:09.056Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/7e/3bd2fe6a1e41015c406e1d68b2a3a86998475d0a4e8a2b4fb72d3e0728a3/ultralytics-8.4.92-py3-none-any.whl", hash = "sha256:86eeaa79d9b888003272fb5e98433e3af7a0c3adb83ba088d0a28407ae69e3cd", size = 1357331, upload-time = "2026-07-10T11:54:51.882Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/11/04f322d321227daeec5be93ec86af382f25c126c3e42664ed025731de745/ultralytics-8.4.101-py3-none-any.whl", hash = "sha256:ac1cd12704fe82c520f906b147a24a54123d38d6c83f947a3ef6b475ed464c11", size = 1372605, upload-time = "2026-07-18T16:49:05.063Z" },
 ]
 
 [[package]]
