@@ -669,7 +669,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sdnotify", specifier = ">=0.3.2" },
-    { name = "ultralytics", specifier = "==8.4.108" },
+    { name = "ultralytics", specifier = "==8.4.115" },
 ]
 provides-extras = ["dev"]
 
@@ -2192,7 +2192,7 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.108"
+version = "8.4.115"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -2212,9 +2212,9 @@ dependencies = [
     { name = "torchvision" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/91/e2/3615faa191c2ca7f2bcabece1613545f0e611b903ddab59653a68ab96f08/ultralytics-8.4.108.tar.gz", hash = "sha256:ccadc57abce07001935e3b2251e19bb783bbdbfa3adf6b0decb5e1969fd0c876", size = 1203522, upload-time = "2026-07-27T20:30:16.621Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/9c/3181f5531b8875d6655caa339dbd63ba2573c98c6b90bf077b60667720ca/ultralytics-8.4.115.tar.gz", hash = "sha256:66cf93e391e860386b72f0be8d0335a16aea203b7e7848d7a9cb39adc92252dc", size = 1194050, upload-time = "2026-08-01T16:07:50.086Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/98/28/b75da59820b89904c5a334e2c8f1b89eb820517824c6a8c7abbf15d6d5e6/ultralytics-8.4.108-py3-none-any.whl", hash = "sha256:69c24b6890c98e97a01c2ce886a60b5ebdc8c39198d68390949b2fa88e75faa0", size = 1426270, upload-time = "2026-07-27T20:30:12.845Z" },
+    { url = "https://files.pythonhosted.org/packages/81/bc/0cfef49c6ae3250bf66762c8bd099c4d619ddc11f06fb2445825b7fdf8fa/ultralytics-8.4.115-py3-none-any.whl", hash = "sha256:4ee2767a88fb9d67baa102a669faaee1a66e832d21d3180469f29a935a95939c", size = 1412932, upload-time = "2026-08-01T16:07:45.786Z" },
 ]
 
 [[package]]
