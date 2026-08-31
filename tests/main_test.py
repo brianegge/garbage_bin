@@ -3,18 +3,23 @@ import configparser
 import pytest
 
 from garbage_bin.main import (
+    MAX_HOLD_CYCLES,
     connect_mqtt,
     get_device_info,
     get_health_status,
+    get_hold_reason,
     get_section,
     get_version,
     graceful_shutdown,
+    interruptible_sleep,
     load_config,
     main,
     on_connect,
     on_disconnect,
     on_message,
     publish_discovery,
+    publish_health,
+    track_spike,
 )
 
 
@@ -185,24 +190,140 @@ def test_get_device_info(mocker):
 
 
 def test_get_health_status_healthy():
-    assert get_health_status(200, 100, True) == "healthy"
+    assert get_health_status(200, 100, 500, True) == "healthy"
 
 
 def test_get_health_status_camera_error():
-    assert get_health_status(200, 100, False) == "camera_error"
+    assert get_health_status(200, 100, 500, False) == "camera_error"
 
 
 def test_get_health_status_degraded_memory():
-    assert get_health_status(600, 100, True) == "degraded"
+    assert get_health_status(900, 100, 500, True) == "degraded"
 
 
 def test_get_health_status_degraded_inference():
-    assert get_health_status(200, 400, True) == "degraded"
+    assert get_health_status(200, 1500, 500, True) == "degraded"
+
+
+def test_get_health_status_degraded_camera_time():
+    """A slow camera fetch degrades health on its own."""
+    assert get_health_status(200, 100, 4000, True) == "degraded"
+
+
+def test_get_health_status_degraded_while_stuck_holding():
+    assert get_health_status(200, 100, 500, True, MAX_HOLD_CYCLES) == "degraded"
+
+
+def test_get_health_status_normal_operating_range_is_healthy():
+    """The observed steady state (~630MB, ~300ms inference) is not degraded."""
+    assert get_health_status(630, 300, 2400, True) == "healthy"
 
 
 def test_get_health_status_camera_error_takes_priority():
     """Camera error takes priority over degraded metrics."""
-    assert get_health_status(600, 400, False) == "camera_error"
+    assert get_health_status(900, 1500, 4000, False) == "camera_error"
+
+
+def test_get_hold_reason_none_when_scene_is_clear():
+    assert get_hold_reason({"tool_bucket": 0.9, "honda_civic": 0.95}) is None
+
+
+def test_get_hold_reason_person_below_old_threshold():
+    """A person at 0.4 used to pass the gate and zero out an occluded car."""
+    reason = get_hold_reason({"tool_bucket": 0.9, "person": 0.4})
+    assert reason == "person in garage"
+
+
+def test_get_hold_reason_ignores_faint_person():
+    assert get_hold_reason({"tool_bucket": 0.9, "person": 0.1}) is None
+
+
+def test_get_hold_reason_single_object_is_enough():
+    """One recognized object proves the frame is not black, whichever it is."""
+    assert get_hold_reason({"honda_civic": 0.95, "something": -1.0}) is None
+
+
+def test_get_hold_reason_empty_frame():
+    """No detections at all means a broken image, not an empty garage."""
+    assert get_hold_reason({"something": -1.0}) == "no objects detected"
+
+
+def test_get_hold_reason_no_detections_whatsoever():
+    assert get_hold_reason({}) == "no objects detected"
+
+
+def test_get_hold_reason_person_takes_priority():
+    assert get_hold_reason({"person": 0.9}) == "person in garage"
+
+
+def test_track_spike_warns_above_average(caplog):
+    import logging
+
+    samples = [100] * 10
+    with caplog.at_level(logging.WARNING):
+        track_spike(samples, 5000, "Camera fetch", 3000)
+    assert "Camera fetch time spike: 5000ms" in caplog.text
+
+
+def test_track_spike_quiet_below_threshold(caplog):
+    import logging
+
+    samples = [100] * 10
+    with caplog.at_level(logging.WARNING):
+        track_spike(samples, 900, "Camera fetch", 3000)
+    assert caplog.text == ""
+
+
+def test_track_spike_trims_samples():
+    samples = list(range(100))
+    track_spike(samples, 1, "Camera fetch", 3000)
+    assert len(samples) == 50
+
+
+def test_interruptible_sleep_returns_early_when_killed(mocker):
+    killer = mocker.Mock()
+    killer.kill_now = True
+    sleep = mocker.patch("garbage_bin.main.time.sleep")
+    interruptible_sleep(60, killer)
+    sleep.assert_not_called()
+
+
+def test_interruptible_sleep_skips_negative_delay(mocker):
+    killer = mocker.Mock()
+    killer.kill_now = False
+    sleep = mocker.patch("garbage_bin.main.time.sleep")
+    interruptible_sleep(-5, killer)
+    sleep.assert_not_called()
+
+
+def test_publish_health_reports_camera_error(mocker):
+    """A cycle that never reached the camera must still publish."""
+    import json
+
+    mqtt_client = mocker.Mock()
+    mocker.patch(
+        "garbage_bin.main.get_health_metrics",
+        return_value={"memory_mb": 400.0, "memory_percent": 2.5},
+    )
+    publish_health(mqtt_client, 0, 0, False, 0)
+    topic, payload = mqtt_client.publish.call_args[0]
+    assert topic == "garagecam/health"
+    assert json.loads(payload)["status"] == "camera_error"
+
+
+def test_publish_health_splits_camera_and_inference(mocker):
+    import json
+
+    mqtt_client = mocker.Mock()
+    mocker.patch(
+        "garbage_bin.main.get_health_metrics",
+        return_value={"memory_mb": 400.0, "memory_percent": 2.5},
+    )
+    publish_health(mqtt_client, 2400, 280, True, 3)
+    payload = json.loads(mqtt_client.publish.call_args[0][1])
+    assert payload["camera_ms"] == 2400
+    assert payload["inference_ms"] == 280
+    assert payload["hold_cycles"] == 3
 
 
 def test_publish_discovery_publishes_all_entities(mocker):

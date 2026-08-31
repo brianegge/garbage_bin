@@ -23,10 +23,26 @@ from ultralytics import YOLO
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
 
-# Health monitoring thresholds
-MEMORY_WARNING_THRESHOLD_MB = 500
-INFERENCE_TIME_WARNING_MS = 300
+# Health monitoring thresholds. Memory sits at 420-630MB in normal operation
+# (the YOLO model dominates it), and model inference runs 200-400ms; the camera
+# fetch is the volatile part, typically ~2s and occasionally much worse.
+MEMORY_WARNING_THRESHOLD_MB = 800
+INFERENCE_TIME_WARNING_MS = 1000
+CAMERA_TIME_WARNING_MS = 3000
 HEARTBEAT_FILE = Path("/tmp/garagecam_heartbeat")
+
+CYCLE_SECONDS = 15.0
+
+# Scene sanity gates. A zero score only means "absent" when we can see the whole
+# bay, so hold the last known state whenever the view is obstructed or the frame
+# is unreadable. Without this, one occluded frame while someone walks past a
+# parked car drops the rolling average below the departure threshold in three
+# cycles and reports the car as gone.
+PERSON_HOLD_CONFIDENCE = 0.25
+MAX_HOLD_CYCLES = 40  # ~10 minutes; past this, holding is itself a problem
+
+# "something" is a synthetic aggregate, not a detected class.
+SYNTHETIC_KEYS = frozenset({"something"})
 
 
 _process = psutil.Process()
@@ -59,16 +75,95 @@ def get_health_metrics():
     }
 
 
-def get_health_status(memory_mb, inference_ms, camera_ok):
+def get_health_status(memory_mb, inference_ms, camera_ms, camera_ok, hold_cycles=0):
     """Determine overall health status."""
     if not camera_ok:
         return "camera_error"
     if (
         memory_mb > MEMORY_WARNING_THRESHOLD_MB
         or inference_ms > INFERENCE_TIME_WARNING_MS
+        or camera_ms > CAMERA_TIME_WARNING_MS
+        or hold_cycles >= MAX_HOLD_CYCLES
     ):
         return "degraded"
     return "healthy"
+
+
+def get_hold_reason(objects):
+    """Return why detections should not update state, or None to proceed.
+
+    A person in frame may be standing between the camera and a vehicle, so a
+    zero score for that vehicle means nothing. A frame with no detections at
+    all is not an empty garage, it is a black or broken image; recognizing any
+    one object is enough to trust the rest of the frame.
+    """
+    if objects.get("person", 0.0) > PERSON_HOLD_CONFIDENCE:
+        return "person in garage"
+    if not set(objects) - SYNTHETIC_KEYS:
+        return "no objects detected"
+    return None
+
+
+def track_spike(samples, value, label, threshold):
+    """Record a timing sample and warn when it jumps above its recent average."""
+    samples.append(value)
+    if len(samples) > 100:
+        del samples[:-50]
+    if len(samples) > 1:
+        avg = sum(samples[-10:]) / min(len(samples), 10)
+        if value > avg * 1.5 and value > threshold:
+            log.warning("%s time spike: %dms (avg: %.0fms)", label, value, avg)
+
+
+def interruptible_sleep(seconds, killer, step=0.5):
+    """Sleep in short steps so a SIGTERM is noticed without waiting a full cycle."""
+    deadline = time.time() + seconds
+    while not killer.kill_now:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        time.sleep(min(step, remaining))
+
+
+def publish_health(mqtt_client, camera_ms, inference_ms, camera_ok, hold_cycles):
+    """Log and publish health metrics.
+
+    Runs on failed cycles too, so a camera outage actually reaches Home
+    Assistant rather than leaving the sensor stale at its last good value.
+    """
+    metrics = get_health_metrics()
+    log.info(
+        "Health: memory=%.1fMB (%.1f%%), camera=%dms, inference=%dms",
+        metrics["memory_mb"],
+        metrics["memory_percent"],
+        camera_ms,
+        inference_ms,
+    )
+
+    # Force garbage collection if memory is high
+    if metrics["memory_mb"] > MEMORY_WARNING_THRESHOLD_MB:
+        log.warning(
+            "Memory usage high (%.1fMB), forcing garbage collection",
+            metrics["memory_mb"],
+        )
+        gc.collect()
+        metrics = get_health_metrics()
+        log.info(
+            "After GC: memory=%.1fMB (%.1f%%)",
+            metrics["memory_mb"],
+            metrics["memory_percent"],
+        )
+
+    health_payload = {
+        "memory_mb": metrics["memory_mb"],
+        "camera_ms": camera_ms,
+        "inference_ms": inference_ms,
+        "hold_cycles": hold_cycles,
+        "status": get_health_status(
+            metrics["memory_mb"], inference_ms, camera_ms, camera_ok, hold_cycles
+        ),
+    }
+    mqtt_client.publish("garagecam/health", json.dumps(health_payload))
 
 
 class GracefulKiller:
@@ -305,6 +400,8 @@ def main():
 
     # Health monitoring state
     cycle_count = 0
+    hold_cycles = 0
+    camera_times = []
     inference_times = []
     camera_ok = True
     img = None
@@ -312,76 +409,41 @@ def main():
     while not killer.kill_now:
         start = time.time()
         faulthandler.dump_traceback_later(240, repeat=False)
+        camera_ms = 0
+        inference_ms = 0
         try:
             if img is not None:
                 img.close()
                 img = None
-            objects, img = detectframe(model, get_image(config["camera"]))
-            inference_ms = int((time.time() - start) * 1000)
-            inference_times.append(inference_ms)
+            # Timed separately: the fetch is a network round trip to the camera
+            # and the inference is local, and they fail for unrelated reasons.
+            frame = get_image(config["camera"])
+            camera_ms = int((time.time() - start) * 1000)
+            inference_start = time.time()
+            objects, img = detectframe(model, frame)
+            inference_ms = int((time.time() - inference_start) * 1000)
             camera_ok = True
 
-            # Track inference time spikes
-            if len(inference_times) > 1:
-                avg_inference = sum(inference_times[-10:]) / min(
-                    len(inference_times), 10
-                )
-                if (
-                    inference_ms > avg_inference * 1.5
-                    and inference_ms > INFERENCE_TIME_WARNING_MS
-                ):
+            track_spike(camera_times, camera_ms, "Camera fetch", CAMERA_TIME_WARNING_MS)
+            track_spike(
+                inference_times, inference_ms, "Inference", INFERENCE_TIME_WARNING_MS
+            )
+
+            hold_reason = get_hold_reason(objects)
+            if hold_reason:
+                hold_cycles += 1
+                if hold_cycles % MAX_HOLD_CYCLES == 0:
                     log.warning(
-                        "Inference time spike: %dms (avg: %.0fms)",
-                        inference_ms,
-                        avg_inference,
+                        "Held state for %d cycles (%s) — detections may be stuck",
+                        hold_cycles,
+                        hold_reason,
                     )
-
-            # Keep only recent inference times
-            if len(inference_times) > 100:
-                inference_times = inference_times[-50:]
-
-            # Log health metrics periodically (every 10 cycles, ~2.5 minutes)
-            cycle_count += 1
-            if cycle_count % 10 == 0:
-                metrics = get_health_metrics()
-                log.info(
-                    "Health: memory=%.1fMB (%.1f%%), inference=%dms",
-                    metrics["memory_mb"],
-                    metrics["memory_percent"],
-                    inference_ms,
-                )
-
-                # Force garbage collection if memory is high
-                if metrics["memory_mb"] > MEMORY_WARNING_THRESHOLD_MB:
-                    log.warning(
-                        "Memory usage high (%.1fMB), forcing garbage collection",
-                        metrics["memory_mb"],
-                    )
-                    gc.collect()
-                    metrics_after = get_health_metrics()
-                    log.info(
-                        "After GC: memory=%.1fMB (%.1f%%)",
-                        metrics_after["memory_mb"],
-                        metrics_after["memory_percent"],
-                    )
-
-                # Publish health status to MQTT
-                health_payload = {
-                    "memory_mb": metrics["memory_mb"],
-                    "inference_ms": inference_ms,
-                    "status": get_health_status(
-                        metrics["memory_mb"], inference_ms, camera_ok
-                    ),
-                }
-                mqtt_client.publish("garagecam/health", json.dumps(health_payload))
-
-            if "person" in objects and objects["person"] > 0.6:
-                log.info("Skipping while person is in garage")
+                else:
+                    log.info("Holding state: %s", hold_reason)
                 gc.collect()
                 continue
-            if objects["something"] < 0.1:
-                log.info("Nothing is in garage")
-                # continue
+            hold_cycles = 0
+
             for device in devices:
                 command = None
                 if device.hass_name in objects:
@@ -412,11 +474,16 @@ def main():
         except KeyboardInterrupt:
             break
         finally:
+            # In the finally block so a cycle that failed to reach the camera
+            # still reports, and so a held cycle still reports.
+            cycle_count += 1
+            if cycle_count % 10 == 0:
+                publish_health(
+                    mqtt_client, camera_ms, inference_ms, camera_ok, hold_cycles
+                )
             sd.notify("WATCHDOG=1")
             HEARTBEAT_FILE.touch()
-            delay = 15.0 - (time.time() - start)
-            if delay > 0.0:
-                time.sleep(delay)
+            interruptible_sleep(CYCLE_SECONDS - (time.time() - start), killer)
         try:
             nfs_ok = sync_local_to_remote(config["file"]["path"])
             mqtt_client.publish(

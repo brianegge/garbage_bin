@@ -13,6 +13,13 @@ from requests.auth import HTTPDigestAuth
 
 LOCAL_FALLBACK = "/data/local"
 
+# Confidence floor for reporting a detection.
+DETECTION_THRESHOLD = 0.4
+# A person who is only partly visible still occludes whatever is behind them,
+# so report them well below the threshold used to decide whether a vehicle is
+# present.
+PERSON_THRESHOLD = 0.25
+
 # Module-level session for connection reuse
 _session = None
 
@@ -125,7 +132,7 @@ def sync_local_to_remote(remote_path):
     return True
 
 
-def get_image(camera, timeout=60):
+def get_image(camera, timeout=15):
     session = get_session()
     session.auth = HTTPDigestAuth(camera["user"], camera["password"])
     # curl -v --digest --user "admin:Password1"  "http://garage-cam.home/cgi-bin/snapshot.cgi" -o capture/garage.jpg
@@ -154,7 +161,9 @@ def detectframe(model, img):
         maxes[cls] = max(conf, maxes[cls])
         if cls != "honda civic":
             something = max(something, conf)
-    o = dict(filter(lambda item: item[1] > 0.4, maxes.items()))
+    o = dict(filter(lambda item: item[1] > DETECTION_THRESHOLD, maxes.items()))
+    if "person" in maxes and maxes["person"] > PERSON_THRESHOLD:
+        o["person"] = maxes["person"]
     o["something"] = something
     o = sanitize(o)
     # Explicitly free YOLO results and their tensors
