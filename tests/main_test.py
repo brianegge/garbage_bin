@@ -198,7 +198,7 @@ def test_get_health_status_camera_error():
 
 
 def test_get_health_status_degraded_memory():
-    assert get_health_status(900, 100, 500, True) == "degraded"
+    assert get_health_status(1300, 100, 500, True) == "degraded"
 
 
 def test_get_health_status_degraded_inference():
@@ -215,13 +215,13 @@ def test_get_health_status_degraded_while_stuck_holding():
 
 
 def test_get_health_status_normal_operating_range_is_healthy():
-    """The observed steady state (~630MB, ~300ms inference) is not degraded."""
-    assert get_health_status(630, 300, 2400, True) == "healthy"
+    """The observed steady state (~940MB, ~300ms inference) is not degraded."""
+    assert get_health_status(940, 300, 1100, True) == "healthy"
 
 
 def test_get_health_status_camera_error_takes_priority():
     """Camera error takes priority over degraded metrics."""
-    assert get_health_status(900, 1500, 4000, False) == "camera_error"
+    assert get_health_status(1300, 1500, 4000, False) == "camera_error"
 
 
 def test_get_hold_reason_none_when_scene_is_clear():
@@ -355,8 +355,7 @@ def test_publish_discovery_payload_contents(mocker):
     device.hass_name = "honda_civic"
     publish_discovery(client, [device], "garagecam/status")
     payloads = {
-        call.args[0]: json.loads(call.args[1])
-        for call in client.publish.call_args_list
+        call.args[0]: json.loads(call.args[1]) for call in client.publish.call_args_list
     }
     # Binary sensor for device
     civic = payloads["homeassistant/binary_sensor/honda_civic/config"]
