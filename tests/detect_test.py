@@ -1,9 +1,89 @@
+import io
 import os
 
 from PIL import Image
 from ultralytics import YOLO
 
-from garbage_bin.detect import detectframe, sanitize
+from garbage_bin.detect import detectframe, get_image, sanitize
+
+
+def _jpeg_bytes(size=(64, 48)):
+    buf = io.BytesIO()
+    Image.new("RGB", size, "gray").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _mock_session(mocker, content, status=200):
+    session = mocker.Mock()
+    response = mocker.Mock()
+    response.content = content
+    response.status_code = status
+    if status >= 400:
+        import requests
+
+        response.raise_for_status.side_effect = requests.HTTPError(f"{status}")
+    else:
+        response.raise_for_status.return_value = None
+    session.get.return_value = response
+    mocker.patch("garbage_bin.detect.get_session", return_value=session)
+    return session
+
+
+def test_get_image_url_overrides_host(mocker):
+    session = _mock_session(mocker, _jpeg_bytes())
+    img = get_image({"url": "http://blueiris:81/image/Garage", "auth": "none"})
+    session.get.assert_called_once_with("http://blueiris:81/image/Garage", timeout=15)
+    assert session.auth is None
+    assert img.size == (64, 48)
+
+
+def test_get_image_defaults_to_dahua_snapshot_with_digest(mocker):
+    session = _mock_session(mocker, _jpeg_bytes())
+    get_image({"host": "garage-cam.home", "user": "admin", "password": "x"})
+    session.get.assert_called_once_with(
+        "http://garage-cam.home/cgi-bin/snapshot.cgi", timeout=15
+    )
+    assert session.auth is not None
+
+
+def test_get_image_basic_auth(mocker):
+    from requests.auth import HTTPBasicAuth
+
+    session = _mock_session(mocker, _jpeg_bytes())
+    get_image(
+        {
+            "url": "http://blueiris:81/image/Garage",
+            "auth": "basic",
+            "user": "u",
+            "password": "p",
+        }
+    )
+    assert isinstance(session.auth, HTTPBasicAuth)
+
+
+def test_get_image_resizes_stretched_frame(mocker):
+    """Blue Iris serves 16:9-stretched frames; restore the native geometry."""
+    _mock_session(mocker, _jpeg_bytes(size=(346, 194)))
+    img = get_image(
+        {"url": "http://blueiris:81/image/Garage", "auth": "none", "resize": "259x194"}
+    )
+    assert img.size == (259, 194)
+
+
+def test_get_image_skips_resize_when_already_native(mocker):
+    _mock_session(mocker, _jpeg_bytes(size=(64, 48)))
+    img = get_image({"url": "http://x/image/Garage", "auth": "none", "resize": "64x48"})
+    assert img.size == (64, 48)
+
+
+def test_get_image_raises_on_http_error(mocker):
+    """An auth failure or BI error surfaces as a camera error, not a decode error."""
+    import pytest
+    import requests
+
+    _mock_session(mocker, b"Unauthorized", status=401)
+    with pytest.raises(requests.HTTPError):
+        get_image({"url": "http://x/image/Garage", "auth": "none"})
 
 
 def test_sanitize():
