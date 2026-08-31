@@ -31,7 +31,10 @@ INFERENCE_TIME_WARNING_MS = 1000
 CAMERA_TIME_WARNING_MS = 3000
 HEARTBEAT_FILE = Path("/tmp/garagecam_heartbeat")
 
-CYCLE_SECONDS = 15.0
+# With the Blue Iris snapshot source (~80ms/frame) there is headroom to poll
+# faster than the camera's own snapshot encoder ever allowed. At 5s the EMA in
+# Device reaches the 0.9 arrival threshold in ~45s instead of ~2.3 min.
+CYCLE_SECONDS = 5.0
 
 # Scene sanity gates. A zero score only means "absent" when we can see the whole
 # bay, so hold the last known state whenever the view is obstructed or the frame

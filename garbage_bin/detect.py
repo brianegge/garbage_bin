@@ -9,7 +9,7 @@ from io import BytesIO
 import requests
 import torch
 from PIL import Image
-from requests.auth import HTTPDigestAuth
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 LOCAL_FALLBACK = "/data/local"
 
@@ -133,15 +133,39 @@ def sync_local_to_remote(remote_path):
 
 
 def get_image(camera, timeout=15):
+    """Fetch a frame from the configured snapshot source.
+
+    With a `url` key, fetches that URL directly — e.g. Blue Iris's
+    /image/{shortname} endpoint, which serves its latest decoded frame in
+    ~80ms, where snapshot.cgi makes the camera encode a 5MP JPEG on demand
+    (~2s at rest, walking to a hard ~7s ceiling under repeat polling).
+    Without one, falls back to the camera's Dahua snapshot endpoint.
+
+    `auth` selects the scheme: digest (default, Dahua), basic, or none
+    (Blue Iris with anonymous LAN access).
+
+    `resize` (e.g. 2592x1944) restores the native camera geometry: Blue Iris
+    serves this camera stretched to 3464x1944, and the model was trained on
+    4:3 frames.
+    """
     session = get_session()
-    session.auth = HTTPDigestAuth(camera["user"], camera["password"])
-    # curl -v --digest --user "admin:Password1"  "http://garage-cam.home/cgi-bin/snapshot.cgi" -o capture/garage.jpg
-    url = f"http://{camera['host']}/cgi-bin/snapshot.cgi"
+    scheme = camera.get("auth", "digest")
+    if scheme == "none":
+        session.auth = None
+    elif scheme == "basic":
+        session.auth = HTTPBasicAuth(camera["user"], camera["password"])
+    else:
+        # curl -v --digest --user "admin:Password1" "http://garage-cam.home/cgi-bin/snapshot.cgi"
+        session.auth = HTTPDigestAuth(camera["user"], camera["password"])
+    url = camera.get("url") or f"http://{camera['host']}/cgi-bin/snapshot.cgi"
     response = session.get(url, timeout=timeout)
+    response.raise_for_status()
     img = Image.open(BytesIO(response.content))
-    # img = cv2.imdecode(numpy.fromstring(request, numpy.uint8), cv2.IMREAD_UNCHANGED)
-    if img is None:
-        return ["Error reading image"]
+    resize = camera.get("resize")
+    if resize:
+        width, height = (int(d) for d in resize.lower().split("x"))
+        if img.size != (width, height):
+            img = img.resize((width, height))
     return img
 
 
