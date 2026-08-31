@@ -23,10 +23,12 @@ from ultralytics import YOLO
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
 
-# Health monitoring thresholds. Memory sits at 420-630MB in normal operation
-# (the YOLO model dominates it), and model inference runs 200-400ms; the camera
-# fetch is the volatile part, typically ~2s and occasionally much worse.
-MEMORY_WARNING_THRESHOLD_MB = 800
+# Health monitoring thresholds. Memory sits at ~930-940MB in normal operation
+# with current torch/ultralytics (measured post-deploy 2026-08-31; it was
+# 420-630MB on the previous image, and gc reclaims none of it — this is the
+# model working set, not a leak). Model inference runs 200-400ms; the camera
+# fetch via Blue Iris is 100-1100ms.
+MEMORY_WARNING_THRESHOLD_MB = 1200
 INFERENCE_TIME_WARNING_MS = 1000
 CAMERA_TIME_WARNING_MS = 3000
 HEARTBEAT_FILE = Path("/tmp/garagecam_heartbeat")
