@@ -17,9 +17,18 @@ You need to create a config file which connects to the camera and MQTT broker.
 path=/mnt/capture
 
 [camera]
-user=admin
-password=*****
-host=garage-cam.home
+# Preferred: fetch the latest decoded frame from Blue Iris (~80ms) instead of
+# asking the camera to encode a snapshot on demand (2-7s).
+url=http://blueiris.home:81/image/Garage?q=85
+auth=none
+# Blue Iris serves this camera stretched to 16:9; restore the native 4:3
+# geometry the model was trained on.
+resize=2592x1944
+
+# Fallback: direct from the camera (digest auth is the default scheme).
+#user=admin
+#password=*****
+#host=garage-cam.home
 
 [mqtt]
 host=mqtt
