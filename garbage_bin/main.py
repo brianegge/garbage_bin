@@ -44,6 +44,12 @@ CYCLE_SECONDS = 5.0
 # parked car drops the rolling average below the departure threshold in three
 # cycles and reports the car as gone.
 PERSON_HOLD_CONFIDENCE = 0.25
+# Keep holding for ~60s after a person leaves frame: they usually leave by
+# getting into a car, and the car backing out occludes whatever is behind it
+# with nobody visible to trigger the person hold. Observed 2026-08-31 06:31 —
+# the garbage bin "departed" for 54s while the Civic backed over its line of
+# sight. Real transitions just report ~a minute later.
+PERSON_EXIT_GRACE_CYCLES = 12
 MAX_HOLD_CYCLES = 40  # ~10 minutes; past this, holding is itself a problem
 
 # "something" is a synthetic aggregate, not a detected class.
@@ -107,6 +113,20 @@ def get_hold_reason(objects):
     if not set(objects) - SYNTHETIC_KEYS:
         return "no objects detected"
     return None
+
+
+def resolve_hold(objects, person_grace):
+    """Combine the frame's hold reason with the person-exit grace period.
+
+    Returns (hold_reason, person_grace). A person in frame re-arms the grace
+    counter; a clear frame burns one grace cycle and still holds.
+    """
+    reason = get_hold_reason(objects)
+    if reason == "person in garage":
+        return reason, PERSON_EXIT_GRACE_CYCLES
+    if reason is None and person_grace > 0:
+        return "person recently left", person_grace - 1
+    return reason, person_grace
 
 
 def track_spike(samples, value, label, threshold):
@@ -406,6 +426,7 @@ def main():
     # Health monitoring state
     cycle_count = 0
     hold_cycles = 0
+    person_grace = 0
     camera_times = []
     inference_times = []
     camera_ok = True
@@ -434,7 +455,7 @@ def main():
                 inference_times, inference_ms, "Inference", INFERENCE_TIME_WARNING_MS
             )
 
-            hold_reason = get_hold_reason(objects)
+            hold_reason, person_grace = resolve_hold(objects, person_grace)
             if hold_reason:
                 hold_cycles += 1
                 if hold_cycles % MAX_HOLD_CYCLES == 0:

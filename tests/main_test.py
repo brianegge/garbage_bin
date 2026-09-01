@@ -4,6 +4,7 @@ import pytest
 
 from garbage_bin.main import (
     MAX_HOLD_CYCLES,
+    PERSON_EXIT_GRACE_CYCLES,
     connect_mqtt,
     get_device_info,
     get_health_status,
@@ -19,6 +20,7 @@ from garbage_bin.main import (
     on_message,
     publish_discovery,
     publish_health,
+    resolve_hold,
     track_spike,
 )
 
@@ -254,6 +256,38 @@ def test_get_hold_reason_no_detections_whatsoever():
 
 def test_get_hold_reason_person_takes_priority():
     assert get_hold_reason({"person": 0.9}) == "person in garage"
+
+
+def test_resolve_hold_person_arms_grace():
+    reason, grace = resolve_hold({"person": 0.9}, 0)
+    assert reason == "person in garage"
+    assert grace == PERSON_EXIT_GRACE_CYCLES
+
+
+def test_resolve_hold_clear_frame_burns_grace():
+    """A departing car occludes the bin right after the person vanishes into
+    it; the grace hold covers that window."""
+    reason, grace = resolve_hold({"honda_civic": 0.95}, 3)
+    assert reason == "person recently left"
+    assert grace == 2
+
+
+def test_resolve_hold_grace_expires():
+    reason, grace = resolve_hold({"honda_civic": 0.95}, 0)
+    assert reason is None
+    assert grace == 0
+
+
+def test_resolve_hold_person_rearms_mid_grace():
+    _, grace = resolve_hold({"person": 0.9}, 2)
+    assert grace == PERSON_EXIT_GRACE_CYCLES
+
+
+def test_resolve_hold_black_frame_does_not_burn_grace():
+    """An unreadable frame holds on its own merits and preserves the grace."""
+    reason, grace = resolve_hold({"something": -1.0}, 5)
+    assert reason == "no objects detected"
+    assert grace == 5
 
 
 def test_track_spike_warns_above_average(caplog):
