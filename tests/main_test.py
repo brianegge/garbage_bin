@@ -3,8 +3,11 @@ import configparser
 import pytest
 
 from garbage_bin.main import (
+    HOLD_NO_OBJECTS,
+    HOLD_PERSON,
+    HOLD_PERSON_RECENT,
     MAX_HOLD_CYCLES,
-    PERSON_EXIT_GRACE_CYCLES,
+    PERSON_EXIT_GRACE_SECONDS,
     connect_mqtt,
     get_device_info,
     get_health_status,
@@ -258,36 +261,53 @@ def test_get_hold_reason_person_takes_priority():
     assert get_hold_reason({"person": 0.9}) == "person in garage"
 
 
-def test_resolve_hold_person_arms_grace():
-    reason, grace = resolve_hold({"person": 0.9}, 0)
-    assert reason == "person in garage"
-    assert grace == PERSON_EXIT_GRACE_CYCLES
+def test_resolve_hold_person_stamps_sighting_time():
+    reason, seen_at = resolve_hold({"person": 0.9}, None, now=100.0)
+    assert reason == HOLD_PERSON
+    assert seen_at == 100.0
 
 
-def test_resolve_hold_clear_frame_burns_grace():
+def test_resolve_hold_clear_frame_within_grace_holds():
     """A departing car occludes the bin right after the person vanishes into
     it; the grace hold covers that window."""
-    reason, grace = resolve_hold({"honda_civic": 0.95}, 3)
-    assert reason == "person recently left"
-    assert grace == 2
+    reason, seen_at = resolve_hold({"honda_civic": 0.95}, 100.0, now=130.0)
+    assert reason == HOLD_PERSON_RECENT
+    assert seen_at == 100.0
 
 
-def test_resolve_hold_grace_expires():
-    reason, grace = resolve_hold({"honda_civic": 0.95}, 0)
+def test_resolve_hold_grace_expires_by_wall_clock():
+    reason, seen_at = resolve_hold(
+        {"honda_civic": 0.95}, 100.0, now=100.0 + PERSON_EXIT_GRACE_SECONDS
+    )
     assert reason is None
-    assert grace == 0
+    assert seen_at == 100.0
+
+
+def test_resolve_hold_no_person_ever_seen():
+    reason, seen_at = resolve_hold({"honda_civic": 0.95}, None, now=100.0)
+    assert reason is None
+    assert seen_at is None
 
 
 def test_resolve_hold_person_rearms_mid_grace():
-    _, grace = resolve_hold({"person": 0.9}, 2)
-    assert grace == PERSON_EXIT_GRACE_CYCLES
+    _, seen_at = resolve_hold({"person": 0.9}, 100.0, now=130.0)
+    assert seen_at == 130.0
 
 
-def test_resolve_hold_black_frame_does_not_burn_grace():
-    """An unreadable frame holds on its own merits and preserves the grace."""
-    reason, grace = resolve_hold({"something": -1.0}, 5)
-    assert reason == "no objects detected"
-    assert grace == 5
+def test_resolve_hold_black_frame_preserves_stamp():
+    """An unreadable frame holds on its own merits and leaves the stamp
+    alone — wall-clock aging still runs underneath it."""
+    reason, seen_at = resolve_hold({"something": -1.0}, 100.0, now=130.0)
+    assert reason == HOLD_NO_OBJECTS
+    assert seen_at == 100.0
+
+
+def test_resolve_hold_grace_ages_out_during_outage():
+    """A camera outage after a person leaves must not preserve the grace:
+    on recovery, a stale sighting no longer holds."""
+    reason, seen_at = resolve_hold({"honda_civic": 0.95}, 100.0, now=1300.0)
+    assert reason is None
+    assert seen_at == 100.0
 
 
 def test_track_spike_warns_above_average(caplog):

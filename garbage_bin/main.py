@@ -44,16 +44,26 @@ CYCLE_SECONDS = 5.0
 # parked car drops the rolling average below the departure threshold in three
 # cycles and reports the car as gone.
 PERSON_HOLD_CONFIDENCE = 0.25
-# Keep holding for ~60s after a person leaves frame: they usually leave by
+# Keep holding for a while after a person leaves frame: they usually leave by
 # getting into a car, and the car backing out occludes whatever is behind it
 # with nobody visible to trigger the person hold. Observed 2026-08-31 06:31 —
 # the garbage bin "departed" for 54s while the Civic backed over its line of
-# sight. Real transitions just report ~a minute later.
-PERSON_EXIT_GRACE_CYCLES = 12
-MAX_HOLD_CYCLES = 40  # ~10 minutes; past this, holding is itself a problem
+# sight. Wall-clock, not cycles: dark frames or a camera outage age the grace
+# out instead of preserving it for hours.
+PERSON_EXIT_GRACE_SECONDS = 60.0
+# Past this, holding is itself a problem; derived so a cycle-time change
+# cannot silently rescale it.
+MAX_HOLD_SECONDS = 600
+MAX_HOLD_CYCLES = int(MAX_HOLD_SECONDS / CYCLE_SECONDS)
 
 # "something" is a synthetic aggregate, not a detected class.
 SYNTHETIC_KEYS = frozenset({"something"})
+
+# Hold reasons. resolve_hold dispatches on these, so they are contract
+# values shared with get_hold_reason — not just log text.
+HOLD_PERSON = "person in garage"
+HOLD_NO_OBJECTS = "no objects detected"
+HOLD_PERSON_RECENT = "person recently left"
 
 
 _process = psutil.Process()
@@ -109,24 +119,33 @@ def get_hold_reason(objects):
     one object is enough to trust the rest of the frame.
     """
     if objects.get("person", 0.0) > PERSON_HOLD_CONFIDENCE:
-        return "person in garage"
+        return HOLD_PERSON
     if not set(objects) - SYNTHETIC_KEYS:
-        return "no objects detected"
+        return HOLD_NO_OBJECTS
     return None
 
 
-def resolve_hold(objects, person_grace):
+def resolve_hold(objects, person_seen_at, now=None):
     """Combine the frame's hold reason with the person-exit grace period.
 
-    Returns (hold_reason, person_grace). A person in frame re-arms the grace
-    counter; a clear frame burns one grace cycle and still holds.
+    Returns (hold_reason, person_seen_at). A person in frame stamps the
+    sighting time; a clear frame within PERSON_EXIT_GRACE_SECONDS of it
+    still holds; a frame held for any other reason leaves the stamp alone.
+    Being wall-clock based, the grace expires during dark frames or camera
+    outages rather than firing for a person seen long ago.
     """
+    if now is None:
+        now = time.monotonic()
     reason = get_hold_reason(objects)
-    if reason == "person in garage":
-        return reason, PERSON_EXIT_GRACE_CYCLES
-    if reason is None and person_grace > 0:
-        return "person recently left", person_grace - 1
-    return reason, person_grace
+    if reason == HOLD_PERSON:
+        return reason, now
+    if (
+        reason is None
+        and person_seen_at is not None
+        and now - person_seen_at < PERSON_EXIT_GRACE_SECONDS
+    ):
+        return HOLD_PERSON_RECENT, person_seen_at
+    return reason, person_seen_at
 
 
 def track_spike(samples, value, label, threshold):
@@ -426,7 +445,7 @@ def main():
     # Health monitoring state
     cycle_count = 0
     hold_cycles = 0
-    person_grace = 0
+    person_seen_at = None
     camera_times = []
     inference_times = []
     camera_ok = True
@@ -455,7 +474,7 @@ def main():
                 inference_times, inference_ms, "Inference", INFERENCE_TIME_WARNING_MS
             )
 
-            hold_reason, person_grace = resolve_hold(objects, person_grace)
+            hold_reason, person_seen_at = resolve_hold(objects, person_seen_at)
             if hold_reason:
                 hold_cycles += 1
                 if hold_cycles % MAX_HOLD_CYCLES == 0:
@@ -466,7 +485,6 @@ def main():
                     )
                 else:
                     log.info("Holding state: %s", hold_reason)
-                gc.collect()
                 continue
             hold_cycles = 0
 
