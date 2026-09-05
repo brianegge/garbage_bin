@@ -1,4 +1,5 @@
 import configparser
+import json
 
 import pytest
 
@@ -417,7 +418,14 @@ def test_publish_discovery_payload_contents(mocker):
     assert civic["state_topic"] == "honda_civic/state"
     assert civic["device_class"] == "presence"
     assert civic["uniq_id"] == "garagecam-honda_civic"
-    assert civic["availability_topic"] == "garagecam/status"
+    # Presence entities gate on the process LWT *and* the camera: a live
+    # process that cannot fetch a frame is still blind, and must not keep
+    # reporting the last position it happened to see.
+    assert {a["topic"] for a in civic["availability"]} == {
+        "garagecam/status",
+        "garagecam/camera/status",
+    }
+    assert civic["availability_mode"] == "all"
     assert civic["device"]["sw_version"] == "v2.0.0"
     # NFS storage
     nfs = payloads["homeassistant/binary_sensor/garagecam-nfs_storage/config"]
@@ -554,3 +562,46 @@ def test_main_setup_and_immediate_exit(mocker):
     mock_publish_disc.assert_not_called()
     # Verify on_message callback was wired
     assert mock_client_instance.on_message is not None
+
+
+def test_presence_entities_require_both_process_and_camera_availability(mocker):
+    """A live process that cannot see is still blind.
+
+    Blue Iris being powered down on 2026-09-05 left binary_sensor.honda_civic
+    reading "home" for 18h after the car had gone: every frame fetch timed out
+    while MQTT publishing carried on, so Home Assistant saw a healthy sensor
+    repeating a stale value. Gating on the process LWT alone cannot catch that.
+    """
+    from garbage_bin.main import CAMERA_STATUS_TOPIC
+
+    client = mocker.Mock()
+    device = mocker.Mock()
+    device.name = "Honda Civic"
+    device.hass_name = "honda_civic"
+    publish_discovery(client, [device], "garagecam/status")
+
+    configs = {
+        c.args[0]: json.loads(c.args[1])
+        for c in client.publish.call_args_list
+        if c.args and "config" in c.args[0]
+    }
+    cfg = configs["homeassistant/binary_sensor/honda_civic/config"]
+    topics = {a["topic"] for a in cfg["availability"]}
+    assert topics == {"garagecam/status", CAMERA_STATUS_TOPIC}
+    assert cfg["availability_mode"] == "all"
+    # The old single-topic form must be gone, or HA ignores the list.
+    assert "availability_topic" not in cfg
+
+
+def test_status_entity_stays_available_when_the_camera_is_down(mocker):
+    """The diagnostic that explains the outage must not vanish with it."""
+    client = mocker.Mock()
+    publish_discovery(client, [], "garagecam/status")
+    configs = {
+        c.args[0]: json.loads(c.args[1])
+        for c in client.publish.call_args_list
+        if c.args and "config" in c.args[0]
+    }
+    status = configs["homeassistant/sensor/garagecam-status/config"]
+    assert "availability" not in status
+    assert "availability_topic" not in status

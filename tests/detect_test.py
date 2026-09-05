@@ -155,3 +155,90 @@ def test_detectframe_drops_very_faint_person():
     model = _StubModel({0.0: "person"}, [_Box(0.1, 0.0)])
     o, _ = detectframe(model, Image.new("RGB", (32, 32)))
     assert "person" not in o
+
+
+def test_get_image_falls_back_to_camera_when_primary_fails(mocker):
+    """Blue Iris going down must not blind the detector: the camera is the
+    source of truth, the NVR is only a faster path to it."""
+    import requests
+
+    from garbage_bin.detect import reset_primary_cooldown
+
+    reset_primary_cooldown()
+    session = mocker.Mock()
+    ok = mocker.Mock()
+    ok.content = _jpeg_bytes()
+    ok.raise_for_status.return_value = None
+
+    def by_url(url, **kwargs):
+        if "blueiris" in url:
+            raise requests.exceptions.ConnectTimeout("down")
+        return ok
+
+    session.get.side_effect = by_url
+    mocker.patch("garbage_bin.detect.get_session", return_value=session)
+
+    img = get_image(
+        {
+            "url": "http://blueiris:81/image/Garage",
+            "auth": "none",
+            "host": "garage-cam.home",
+            "user": "admin",
+            "password": "x",
+        }
+    )
+    assert img.size == (64, 48)
+    urls = [c.args[0] for c in session.get.call_args_list]
+    assert urls == [
+        "http://blueiris:81/image/Garage",
+        "http://garage-cam.home/cgi-bin/snapshot.cgi",
+    ]
+    reset_primary_cooldown()
+
+
+def test_failed_primary_is_skipped_while_cooling_down(mocker):
+    """A long outage must not cost the primary's timeout every cycle."""
+    import requests
+
+    from garbage_bin.detect import reset_primary_cooldown
+
+    reset_primary_cooldown()
+    session = mocker.Mock()
+    ok = mocker.Mock()
+    ok.content = _jpeg_bytes()
+    ok.raise_for_status.return_value = None
+
+    def by_url(url, **kwargs):
+        if "blueiris" in url:
+            raise requests.exceptions.ConnectTimeout("down")
+        return ok
+
+    session.get.side_effect = by_url
+    mocker.patch("garbage_bin.detect.get_session", return_value=session)
+    camera = {
+        "url": "http://blueiris:81/image/Garage",
+        "auth": "none",
+        "host": "garage-cam.home",
+        "user": "admin",
+        "password": "x",
+    }
+    get_image(camera)
+    session.get.reset_mock()
+    get_image(camera)
+    urls = [c.args[0] for c in session.get.call_args_list]
+    assert urls == ["http://garage-cam.home/cgi-bin/snapshot.cgi"]
+    reset_primary_cooldown()
+
+
+def test_primary_failure_without_a_host_still_raises(mocker):
+    """No fallback configured means the error must surface, not be swallowed."""
+    import pytest
+    import requests
+
+    from garbage_bin.detect import reset_primary_cooldown
+
+    reset_primary_cooldown()
+    _mock_session(mocker, b"", status=500)
+    with pytest.raises(requests.HTTPError):
+        get_image({"url": "http://blueiris:81/image/Garage", "auth": "none"})
+    reset_primary_cooldown()

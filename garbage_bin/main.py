@@ -59,6 +59,14 @@ MAX_HOLD_CYCLES = int(MAX_HOLD_SECONDS / CYCLE_SECONDS)
 # "something" is a synthetic aggregate, not a detected class.
 SYNTHETIC_KEYS = frozenset({"something"})
 
+# Separate from the process LWT: the process can be perfectly healthy while
+# blind. Presence entities gate on both.
+CAMERA_STATUS_TOPIC = "garagecam/camera/status"
+# Consecutive failed frames before declaring ourselves blind. One dropped
+# frame is normal; this is ~15s at CYCLE_SECONDS, well under the time any
+# automation would act on a presence change.
+CAMERA_FAILURES_BEFORE_UNAVAILABLE = 3
+
 # Hold reasons. resolve_hold dispatches on these, so they are contract
 # values shared with get_hold_reason — not just log text.
 HOLD_PERSON = "person in garage"
@@ -298,7 +306,18 @@ def publish_discovery(mqtt_client, devices, lwt):
             "state_topic": f"{device.hass_name}/state",
             "device_class": "presence",
             "uniq_id": f"garagecam-{device.hass_name}",
-            "availability_topic": lwt,
+            # These report what the camera can see, so they must be available
+            # only when the process is up AND a frame is actually arriving.
+            # With the process LWT alone, Blue Iris going down on 2026-09-05
+            # left binary_sensor.honda_civic reading "home" for 18h after the
+            # car had left: every fetch timed out while MQTT publishing carried
+            # on, so Home Assistant saw a healthy sensor repeating a stale
+            # value. availability_mode "all" requires both topics to be online.
+            "availability": [
+                {"topic": lwt},
+                {"topic": CAMERA_STATUS_TOPIC},
+            ],
+            "availability_mode": "all",
             "device": device_info,
         }
         mqtt_client.publish(
@@ -449,7 +468,29 @@ def main():
     camera_times = []
     inference_times = []
     camera_ok = True
+    camera_failures = 0
+    camera_available = None  # None = not yet announced, so the first cycle publishes
     img = None
+
+    def set_camera_available(available):
+        """Publish camera availability, but only on a change."""
+        nonlocal camera_available
+        if camera_available == available:
+            return
+        camera_available = available
+        mqtt_client.publish(
+            CAMERA_STATUS_TOPIC,
+            "online" if available else "offline",
+            retain=True,
+        )
+        if available:
+            log.info("Camera readable again — presence entities available")
+        else:
+            log.warning(
+                "No frame for %d cycles — marking presence entities unavailable "
+                "rather than reporting stale positions",
+                CAMERA_FAILURES_BEFORE_UNAVAILABLE,
+            )
 
     while not killer.kill_now:
         start = time.time()
@@ -468,6 +509,8 @@ def main():
             objects, img = detectframe(model, frame)
             inference_ms = int((time.time() - inference_start) * 1000)
             camera_ok = True
+            camera_failures = 0
+            set_camera_available(True)
 
             track_spike(camera_times, camera_ms, "Camera fetch", CAMERA_TIME_WARNING_MS)
             track_spike(
@@ -511,15 +554,19 @@ def main():
             gc.collect()
         except UnidentifiedImageError:
             camera_ok = False
+            camera_failures += 1
             log.warning("Failed to decode image from camera")
         except requests.exceptions.RequestException as e:
             camera_ok = False
+            camera_failures += 1
             log.warning("Camera connection error: %s", e)
         except KeyboardInterrupt:
             break
         finally:
             # In the finally block so a cycle that failed to reach the camera
             # still reports, and so a held cycle still reports.
+            if camera_failures >= CAMERA_FAILURES_BEFORE_UNAVAILABLE:
+                set_camera_available(False)
             cycle_count += 1
             if cycle_count % 10 == 0:
                 publish_health(
