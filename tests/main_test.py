@@ -635,7 +635,7 @@ def test_weekly_camera_reboot_does_not_mark_entities_unavailable():
     reboot_start = 5000
     for elapsed in (10, 30, 60, 90, 110):
         assert camera_is_blind(reboot_start, now=reboot_start + elapsed) is False, (
-            "a %ds reboot must not trip unavailability" % elapsed
+            f"a {elapsed}s reboot must not trip unavailability"
         )
 
 
