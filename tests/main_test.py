@@ -605,3 +605,48 @@ def test_status_entity_stays_available_when_the_camera_is_down(mocker):
     status = configs["homeassistant/sensor/garagecam-status/config"]
     assert "availability" not in status
     assert "availability_topic" not in status
+
+
+def test_camera_blind_needs_the_full_window():
+    """A brief blip must not flap every presence entity unavailable."""
+    from garbage_bin.main import CAMERA_UNAVAILABLE_AFTER_SECONDS, camera_is_blind
+
+    assert camera_is_blind(None, now=1000) is False
+    started = 1000
+    assert camera_is_blind(started, now=started + 5) is False
+    assert camera_is_blind(started, now=started + 30) is False
+    assert (
+        camera_is_blind(started, now=started + CAMERA_UNAVAILABLE_AFTER_SECONDS - 1)
+        is False
+    )
+    assert (
+        camera_is_blind(started, now=started + CAMERA_UNAVAILABLE_AFTER_SECONDS) is True
+    )
+
+
+def test_weekly_camera_reboot_does_not_mark_entities_unavailable():
+    """The camera reboots itself weekly and takes ~60-90s to come back.
+
+    Nothing can drive in or out while it is down, so the last known state is
+    still correct; flapping every entity unavailable and back is worse.
+    """
+    from garbage_bin.main import camera_is_blind
+
+    reboot_start = 5000
+    for elapsed in (10, 30, 60, 90, 110):
+        assert camera_is_blind(reboot_start, now=reboot_start + elapsed) is False, (
+            "a %ds reboot must not trip unavailability" % elapsed
+        )
+
+
+def test_blind_window_is_wall_clock_not_cycles():
+    """A failing cycle costs the fetch timeout, not CYCLE_SECONDS.
+
+    With the direct fallback it costs two timeouts, so counting cycles would
+    stretch the window to several times its nominal length exactly when the
+    camera is down. Four slow cycles of 30s must be enough.
+    """
+    from garbage_bin.main import camera_is_blind
+
+    started = 0
+    assert camera_is_blind(started, now=4 * 30) is True
