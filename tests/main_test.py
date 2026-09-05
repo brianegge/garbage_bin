@@ -696,3 +696,60 @@ def test_camera_availability_recovery_is_logged(mocker, caplog):
     with caplog.at_level(logging.INFO):
         assert publish_camera_availability(client, True, False) is True
     assert "readable again" in caplog.text
+
+
+def _main_config():
+    config = configparser.ConfigParser()
+    config.add_section("mqtt")
+    config.set("mqtt", "host", "broker.local")
+    config.set("mqtt", "port", "1883")
+    config.set("mqtt", "user", "testuser")
+    config.set("mqtt", "password", "testpass")
+    config.add_section("camera")
+    config.add_section("file")
+    config.set("file", "path", "/tmp")
+    return config
+
+
+def _run_one_failing_cycle(mocker, blind):
+    """Drive main() through exactly one cycle in which the camera fetch fails."""
+    import requests
+
+    mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
+    mocker.patch("garbage_bin.main.YOLO")
+    mocker.patch("garbage_bin.main.load_config", return_value=_main_config())
+    mocker.patch("garbage_bin.main.connect_mqtt")
+    mocker.patch("garbage_bin.main.publish_discovery")
+    mocker.patch("garbage_bin.main.graceful_shutdown")
+    mocker.patch("garbage_bin.main.interruptible_sleep")
+    mocker.patch("garbage_bin.main.sync_local_to_remote", return_value=True)
+    mocker.patch("garbage_bin.main.faulthandler")
+    mocker.patch(
+        "garbage_bin.main.get_image",
+        side_effect=requests.exceptions.ConnectTimeout("camera down"),
+    )
+    mocker.patch("garbage_bin.main.camera_is_blind", return_value=blind)
+    spy = mocker.patch(
+        "garbage_bin.main.publish_camera_availability", return_value=False
+    )
+    client = mocker.MagicMock()
+    mocker.patch("garbage_bin.main.paho.Client", return_value=client)
+    killer = mocker.patch("garbage_bin.main.GracefulKiller")
+    type(killer.return_value).kill_now = mocker.PropertyMock(
+        side_effect=[False, True, True]
+    )
+    main()
+    return spy
+
+
+def test_failed_fetch_alone_does_not_mark_unavailable(mocker):
+    """One failed frame is normal — the camera reboots weekly."""
+    spy = _run_one_failing_cycle(mocker, blind=False)
+    spy.assert_not_called()
+
+
+def test_sustained_failure_marks_entities_unavailable(mocker):
+    """Once blind past the window, presence entities must stop reporting."""
+    spy = _run_one_failing_cycle(mocker, blind=True)
+    spy.assert_called_once()
+    assert spy.call_args.args[1] is False  # available=False
