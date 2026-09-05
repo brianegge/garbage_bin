@@ -650,3 +650,49 @@ def test_blind_window_is_wall_clock_not_cycles():
 
     started = 0
     assert camera_is_blind(started, now=4 * 30) is True
+
+
+def test_camera_availability_published_on_first_call(mocker):
+    """Nothing announced yet: HA must not be left waiting on a retained value
+    that was never published."""
+    from garbage_bin.main import CAMERA_STATUS_TOPIC, publish_camera_availability
+
+    client = mocker.MagicMock()
+    assert publish_camera_availability(client, True, None) is True
+    client.publish.assert_called_once_with(
+        CAMERA_STATUS_TOPIC, "online", retain=True
+    )
+
+
+def test_camera_availability_is_not_republished_when_unchanged(mocker):
+    """Publishing every cycle would be pointless broker traffic."""
+    from garbage_bin.main import publish_camera_availability
+
+    client = mocker.MagicMock()
+    assert publish_camera_availability(client, True, True) is True
+    client.publish.assert_not_called()
+
+
+def test_camera_availability_publishes_offline_on_change(mocker, caplog):
+    import logging
+
+    from garbage_bin.main import CAMERA_STATUS_TOPIC, publish_camera_availability
+
+    client = mocker.MagicMock()
+    with caplog.at_level(logging.WARNING):
+        assert publish_camera_availability(client, False, True, blind_for=133.0) is False
+    client.publish.assert_called_once_with(
+        CAMERA_STATUS_TOPIC, "offline", retain=True
+    )
+    assert "133s" in caplog.text
+
+
+def test_camera_availability_recovery_is_logged(mocker, caplog):
+    import logging
+
+    from garbage_bin.main import publish_camera_availability
+
+    client = mocker.MagicMock()
+    with caplog.at_level(logging.INFO):
+        assert publish_camera_availability(client, True, False) is True
+    assert "readable again" in caplog.text

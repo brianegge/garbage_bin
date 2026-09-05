@@ -140,6 +140,32 @@ def get_hold_reason(objects):
     return None
 
 
+def publish_camera_availability(mqtt_client, available, previous, blind_for=None):
+    """Publish camera availability, but only when it changes.
+
+    Returns the state now published, for the caller to carry forward. `previous`
+    of None means nothing has been announced yet, so the first cycle always
+    publishes and Home Assistant is never left waiting on a retained value that
+    does not exist.
+    """
+    if previous == available:
+        return previous
+    mqtt_client.publish(
+        CAMERA_STATUS_TOPIC,
+        "online" if available else "offline",
+        retain=True,
+    )
+    if available:
+        log.info("Camera readable again — presence entities available")
+    else:
+        log.warning(
+            "No frame for %.0fs — marking presence entities unavailable rather "
+            "than reporting stale positions",
+            blind_for if blind_for is not None else CAMERA_UNAVAILABLE_AFTER_SECONDS,
+        )
+    return available
+
+
 def camera_is_blind(failing_since, now=None):
     """Has the camera been unreadable long enough to declare ourselves blind?
 
@@ -493,26 +519,6 @@ def main():
     camera_available = None  # None = not yet announced, so the first cycle publishes
     img = None
 
-    def set_camera_available(available, blind_for=None):
-        """Publish camera availability, but only on a change."""
-        nonlocal camera_available
-        if camera_available == available:
-            return
-        camera_available = available
-        mqtt_client.publish(
-            CAMERA_STATUS_TOPIC,
-            "online" if available else "offline",
-            retain=True,
-        )
-        if available:
-            log.info("Camera readable again — presence entities available")
-        else:
-            log.warning(
-                "No frame for %.0fs — marking presence entities unavailable "
-                "rather than reporting stale positions",
-                blind_for or CAMERA_UNAVAILABLE_AFTER_SECONDS,
-            )
-
     while not killer.kill_now:
         start = time.time()
         faulthandler.dump_traceback_later(240, repeat=False)
@@ -531,7 +537,9 @@ def main():
             inference_ms = int((time.time() - inference_start) * 1000)
             camera_ok = True
             camera_failing_since = None
-            set_camera_available(True)
+            camera_available = publish_camera_availability(
+                mqtt_client, True, camera_available
+            )
 
             track_spike(camera_times, camera_ms, "Camera fetch", CAMERA_TIME_WARNING_MS)
             track_spike(
@@ -587,7 +595,12 @@ def main():
             # In the finally block so a cycle that failed to reach the camera
             # still reports, and so a held cycle still reports.
             if camera_is_blind(camera_failing_since):
-                set_camera_available(False, time.time() - camera_failing_since)
+                camera_available = publish_camera_availability(
+                    mqtt_client,
+                    False,
+                    camera_available,
+                    time.time() - camera_failing_since,
+                )
             cycle_count += 1
             if cycle_count % 10 == 0:
                 publish_health(
