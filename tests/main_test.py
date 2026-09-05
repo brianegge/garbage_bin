@@ -605,3 +605,151 @@ def test_status_entity_stays_available_when_the_camera_is_down(mocker):
     status = configs["homeassistant/sensor/garagecam-status/config"]
     assert "availability" not in status
     assert "availability_topic" not in status
+
+
+def test_camera_blind_needs_the_full_window():
+    """A brief blip must not flap every presence entity unavailable."""
+    from garbage_bin.main import CAMERA_UNAVAILABLE_AFTER_SECONDS, camera_is_blind
+
+    assert camera_is_blind(None, now=1000) is False
+    started = 1000
+    assert camera_is_blind(started, now=started + 5) is False
+    assert camera_is_blind(started, now=started + 30) is False
+    assert (
+        camera_is_blind(started, now=started + CAMERA_UNAVAILABLE_AFTER_SECONDS - 1)
+        is False
+    )
+    assert (
+        camera_is_blind(started, now=started + CAMERA_UNAVAILABLE_AFTER_SECONDS) is True
+    )
+
+
+def test_weekly_camera_reboot_does_not_mark_entities_unavailable():
+    """The camera reboots itself weekly and takes ~60-90s to come back.
+
+    Nothing can drive in or out while it is down, so the last known state is
+    still correct; flapping every entity unavailable and back is worse.
+    """
+    from garbage_bin.main import camera_is_blind
+
+    reboot_start = 5000
+    for elapsed in (10, 30, 60, 90, 110):
+        assert camera_is_blind(reboot_start, now=reboot_start + elapsed) is False, (
+            f"a {elapsed}s reboot must not trip unavailability"
+        )
+
+
+def test_blind_window_is_wall_clock_not_cycles():
+    """A failing cycle costs the fetch timeout, not CYCLE_SECONDS.
+
+    With the direct fallback it costs two timeouts, so counting cycles would
+    stretch the window to several times its nominal length exactly when the
+    camera is down. Four slow cycles of 30s must be enough.
+    """
+    from garbage_bin.main import camera_is_blind
+
+    started = 0
+    assert camera_is_blind(started, now=4 * 30) is True
+
+
+def test_camera_availability_published_on_first_call(mocker):
+    """Nothing announced yet: HA must not be left waiting on a retained value
+    that was never published."""
+    from garbage_bin.main import CAMERA_STATUS_TOPIC, publish_camera_availability
+
+    client = mocker.MagicMock()
+    assert publish_camera_availability(client, True, None) is True
+    client.publish.assert_called_once_with(
+        CAMERA_STATUS_TOPIC, "online", retain=True
+    )
+
+
+def test_camera_availability_is_not_republished_when_unchanged(mocker):
+    """Publishing every cycle would be pointless broker traffic."""
+    from garbage_bin.main import publish_camera_availability
+
+    client = mocker.MagicMock()
+    assert publish_camera_availability(client, True, True) is True
+    client.publish.assert_not_called()
+
+
+def test_camera_availability_publishes_offline_on_change(mocker, caplog):
+    import logging
+
+    from garbage_bin.main import CAMERA_STATUS_TOPIC, publish_camera_availability
+
+    client = mocker.MagicMock()
+    with caplog.at_level(logging.WARNING):
+        assert publish_camera_availability(client, False, True, blind_for=133.0) is False
+    client.publish.assert_called_once_with(
+        CAMERA_STATUS_TOPIC, "offline", retain=True
+    )
+    assert "133s" in caplog.text
+
+
+def test_camera_availability_recovery_is_logged(mocker, caplog):
+    import logging
+
+    from garbage_bin.main import publish_camera_availability
+
+    client = mocker.MagicMock()
+    with caplog.at_level(logging.INFO):
+        assert publish_camera_availability(client, True, False) is True
+    assert "readable again" in caplog.text
+
+
+def _main_config():
+    config = configparser.ConfigParser()
+    config.add_section("mqtt")
+    config.set("mqtt", "host", "broker.local")
+    config.set("mqtt", "port", "1883")
+    config.set("mqtt", "user", "testuser")
+    config.set("mqtt", "password", "testpass")
+    config.add_section("camera")
+    config.add_section("file")
+    config.set("file", "path", "/tmp")
+    return config
+
+
+def _run_one_failing_cycle(mocker, blind):
+    """Drive main() through exactly one cycle in which the camera fetch fails."""
+    import requests
+
+    mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
+    mocker.patch("garbage_bin.main.YOLO")
+    mocker.patch("garbage_bin.main.load_config", return_value=_main_config())
+    mocker.patch("garbage_bin.main.connect_mqtt")
+    mocker.patch("garbage_bin.main.publish_discovery")
+    mocker.patch("garbage_bin.main.graceful_shutdown")
+    mocker.patch("garbage_bin.main.interruptible_sleep")
+    mocker.patch("garbage_bin.main.sync_local_to_remote", return_value=True)
+    mocker.patch("garbage_bin.main.faulthandler")
+    mocker.patch(
+        "garbage_bin.main.get_image",
+        side_effect=requests.exceptions.ConnectTimeout("camera down"),
+    )
+    mocker.patch("garbage_bin.main.camera_is_blind", return_value=blind)
+    spy = mocker.patch(
+        "garbage_bin.main.publish_camera_availability", return_value=False
+    )
+    client = mocker.MagicMock()
+    mocker.patch("garbage_bin.main.paho.Client", return_value=client)
+    killer = mocker.patch("garbage_bin.main.GracefulKiller")
+    type(killer.return_value).kill_now = mocker.PropertyMock(
+        side_effect=[False, True, True]
+    )
+    main()
+    return spy
+
+
+def test_failed_fetch_alone_does_not_mark_unavailable(mocker):
+    """One failed frame is normal — the camera reboots weekly."""
+    spy = _run_one_failing_cycle(mocker, blind=False)
+    spy.assert_not_called()
+
+
+def test_sustained_failure_marks_entities_unavailable(mocker):
+    """Once blind past the window, presence entities must stop reporting."""
+    spy = _run_one_failing_cycle(mocker, blind=True)
+    spy.assert_called_once()
+    assert spy.call_args.args[1] is False  # available=False
