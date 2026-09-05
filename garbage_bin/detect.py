@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import time
 from datetime import date, datetime
 from io import BytesIO
 
@@ -132,41 +133,95 @@ def sync_local_to_remote(remote_path):
     return True
 
 
-def get_image(camera, timeout=15):
-    """Fetch a frame from the configured snapshot source.
+# How long to stop trying a failed primary source before probing it again.
+# Without this the primary's full timeout is paid on every cycle while it is
+# down, which stretches a 5s cycle past 15s and starves the detector.
+PRIMARY_COOLDOWN_SECONDS = 300.0
+_primary_down_until = 0.0
 
-    With a `url` key, fetches that URL directly — e.g. Blue Iris's
-    /image/{shortname} endpoint, which serves its latest decoded frame in
-    ~80ms, where snapshot.cgi makes the camera encode a 5MP JPEG on demand
-    (~2s at rest, walking to a hard ~7s ceiling under repeat polling).
-    Without one, falls back to the camera's Dahua snapshot endpoint.
 
-    `auth` selects the scheme: digest (default, Dahua), basic, or none
-    (Blue Iris with anonymous LAN access).
+def reset_primary_cooldown():
+    """Test hook: forget any recorded primary failure."""
+    global _primary_down_until
+    _primary_down_until = 0.0
 
-    `resize` (e.g. 2592x1944) restores the native camera geometry: Blue Iris
-    serves this camera stretched to 3464x1944, and the model was trained on
-    4:3 frames.
-    """
-    session = get_session()
-    scheme = camera.get("auth", "digest")
-    if scheme == "none":
-        session.auth = None
-    elif scheme == "basic":
-        session.auth = HTTPBasicAuth(camera["user"], camera["password"])
-    else:
-        # curl -v --digest --user "admin:Password1" "http://garage-cam.home/cgi-bin/snapshot.cgi"
-        session.auth = HTTPDigestAuth(camera["user"], camera["password"])
-    url = camera.get("url") or f"http://{camera['host']}/cgi-bin/snapshot.cgi"
+
+def _fetch(session, url, timeout, resize):
     response = session.get(url, timeout=timeout)
     response.raise_for_status()
     img = Image.open(BytesIO(response.content))
-    resize = camera.get("resize")
     if resize:
         width, height = (int(d) for d in resize.lower().split("x"))
         if img.size != (width, height):
             img = img.resize((width, height))
     return img
+
+
+def _auth_for(camera, scheme):
+    if scheme == "none":
+        return None
+    if scheme == "basic":
+        return HTTPBasicAuth(camera["user"], camera["password"])
+    # curl -v --digest --user "admin:***" "http://garage-cam.home/cgi-bin/snapshot.cgi"
+    return HTTPDigestAuth(camera["user"], camera["password"])
+
+
+def get_image(camera, timeout=15):
+    """Fetch a frame from the configured snapshot source, falling back.
+
+    With a `url` key, fetches that URL first — e.g. Blue Iris's
+    /image/{shortname} endpoint, which serves its latest decoded frame in
+    ~80ms. If that fails and a `host` is configured, falls back automatically
+    to the camera's own Dahua snapshot endpoint rather than giving up: an NVR
+    is a convenience, not a dependency, and the camera is the source of truth.
+
+    Blue Iris being powered down on 2026-09-05 left this detector blind for
+    18h while `host` sat in the config unused, so the fallback is no longer
+    something you enable by editing a file.
+
+    The failed primary is skipped for PRIMARY_COOLDOWN_SECONDS before being
+    retried, so a long outage costs one timeout every five minutes instead of
+    one per cycle.
+
+    `auth` selects the scheme for the primary: digest (default, Dahua), basic,
+    or none (Blue Iris with anonymous LAN access). The direct fallback always
+    uses digest, since that is what the cameras speak.
+
+    `resize` (e.g. 2592x1944) restores the native camera geometry: Blue Iris
+    serves this camera stretched to 3464x1944 and the model was trained on 4:3
+    frames. It is a no-op on the direct path, which is already native.
+    """
+    global _primary_down_until
+    session = get_session()
+    resize = camera.get("resize")
+    primary = camera.get("url")
+    direct = f"http://{camera['host']}/cgi-bin/snapshot.cgi" if camera.get("host") else None
+
+    if primary and direct and time.monotonic() < _primary_down_until:
+        primary = None  # still cooling down; go straight to the camera
+
+    if primary:
+        session.auth = _auth_for(camera, camera.get("auth", "digest"))
+        try:
+            img = _fetch(session, primary, timeout, resize)
+            _primary_down_until = 0.0
+            return img
+        except Exception as e:
+            if not direct:
+                raise
+            _primary_down_until = time.monotonic() + PRIMARY_COOLDOWN_SECONDS
+            logging.warning(
+                "Snapshot source %s failed (%s) — falling back to the camera "
+                "directly for %ds",
+                primary,
+                e,
+                int(PRIMARY_COOLDOWN_SECONDS),
+            )
+
+    if not direct:
+        raise RuntimeError("camera has neither a url nor a host configured")
+    session.auth = _auth_for(camera, "digest")
+    return _fetch(session, direct, timeout, resize)
 
 
 def detectframe(model, img):
