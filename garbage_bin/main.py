@@ -68,10 +68,10 @@ CAMERA_STATUS_TOPIC = "garagecam/camera/status"
 # reboot is worse than briefly holding the last known state, which is anyway
 # still correct — nothing can drive in or out during the reboot.
 #
-# Wall clock, NOT a cycle count. A failing cycle does not take CYCLE_SECONDS:
-# it costs the fetch timeout, and with the direct fallback it costs two, so
-# counting cycles would stretch a nominal 2 minutes to well over 10. Same
-# reasoning as PERSON_EXIT_GRACE_SECONDS above.
+# Elapsed monotonic time, NOT a cycle count. A failing cycle does not take
+# CYCLE_SECONDS: it costs the fetch timeout, and with the direct fallback it
+# costs two, so counting cycles would stretch a nominal 2 minutes to well over
+# 10. Same reasoning and same clock as PERSON_EXIT_GRACE_SECONDS above.
 CAMERA_UNAVAILABLE_AFTER_SECONDS = 120.0
 
 # Hold reasons. resolve_hold dispatches on these, so they are contract
@@ -169,14 +169,17 @@ def publish_camera_availability(mqtt_client, available, previous, blind_for=None
 def camera_is_blind(failing_since, now=None):
     """Has the camera been unreadable long enough to declare ourselves blind?
 
-    Wall clock rather than a count of failed cycles: a failing cycle costs the
-    fetch timeout rather than CYCLE_SECONDS, and with the direct fallback it
-    costs two, so a cycle count would drift to several times the intended
+    Elapsed time rather than a count of failed cycles: a failing cycle costs
+    the fetch timeout rather than CYCLE_SECONDS, and with the direct fallback
+    it costs two, so a cycle count would drift to several times the intended
     window exactly when it matters.
+
+    Monotonic, so an NTP step or a manual clock change cannot expire the window
+    early or stretch it — same clock resolve_hold() uses.
     """
     if failing_since is None:
         return False
-    now = now if now is not None else time.time()
+    now = now if now is not None else time.monotonic()
     return (now - failing_since) >= CAMERA_UNAVAILABLE_AFTER_SECONDS
 
 
@@ -583,11 +586,11 @@ def main():
             gc.collect()
         except UnidentifiedImageError:
             camera_ok = False
-            camera_failing_since = camera_failing_since or time.time()
+            camera_failing_since = camera_failing_since or time.monotonic()
             log.warning("Failed to decode image from camera")
         except requests.exceptions.RequestException as e:
             camera_ok = False
-            camera_failing_since = camera_failing_since or time.time()
+            camera_failing_since = camera_failing_since or time.monotonic()
             log.warning("Camera connection error: %s", e)
         except KeyboardInterrupt:
             break
@@ -599,7 +602,7 @@ def main():
                     mqtt_client,
                     False,
                     camera_available,
-                    time.time() - camera_failing_since,
+                    time.monotonic() - camera_failing_since,
                 )
             cycle_count += 1
             if cycle_count % 10 == 0:
