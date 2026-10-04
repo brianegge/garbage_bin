@@ -1,4 +1,4 @@
-ARG VARIANT="3.13-bullseye"
+ARG VARIANT="3.14-trixie"
 FROM mcr.microsoft.com/devcontainers/python:${VARIANT}
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -18,7 +18,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
         wget \
         curl \
         llvm \
-        libncurses5-dev \
+        libncurses-dev \
         xz-utils \
         tk-dev \
         libxml2-dev \
@@ -42,24 +42,12 @@ RUN (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y
     && sudo apt update \
     && sudo apt install gh -y
 
-# Python and poetry installation
+# uv installation
 USER $USER
 ARG HOME="/home/$USER"
-ENV POETRY_HOME="$HOME/.poetry"
-ARG PYTHON_VERSION=3.12
 
-# RUN pipx install poetry
 WORKDIR /workspace
-COPY pyproject.toml poetry.lock /workspace/
 RUN pipx install pre-commit
-# ENV PYENV_ROOT="${HOME}/.pyenv"
-# ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:$PATH"
-# RUN echo "Acquire::Check-Valid-Until \"false\";\nAcquire::Check-Date \"false\";" | cat > /etc/apt/apt.conf.d/10no--check-valid-until
-# RUN apt-get update && apt-get install -y ack systemd libsystemd-dev libgl1
-# Install Python and Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-
-ENV PATH="${HOME}/.local/bin:$POETRY_HOME/bin:${PATH}"
-# RUN curl -sSL https://install.python-poetry.org | python3
-RUN poetry config virtualenvs.in-project false
+ENV PATH="${HOME}/.local/bin:${PATH}"

@@ -17,7 +17,7 @@
             ]
         }
     },
-    "postCreateCommand": "pre-commit install && poetry install --no-interaction --no-root",
+    "postCreateCommand": "pre-commit install && uv sync --extra dev",
     //  Podman stuff
     "runArgs": ["--userns=keep-id"],
     "containerUser": "vscode",
