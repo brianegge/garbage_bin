@@ -173,7 +173,7 @@ class FrigatePersons:
         try:
             camera = json.loads(payload)["cameras"][FRIGATE_CAMERA]
             self.camera_fps = float(camera["camera_fps"])
-        except (ValueError, KeyError, TypeError):
+        except ValueError, KeyError, TypeError:
             log.warning("Frigate stats without camera %s", FRIGATE_CAMERA)
             self.camera_fps = None
         self.stats_at = time.monotonic() if now is None else now
