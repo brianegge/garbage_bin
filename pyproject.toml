@@ -56,3 +56,8 @@ ignore = ["E203", "E501"]
 
 [tool.pyright]
 include = ["garbage_bin", "tests"]
+
+[tool.ty.environment]
+# The app imports its siblings flat (`from device import Device`), as pytest's
+# pythonpath above does.
+extra-paths = ["garbage_bin"]

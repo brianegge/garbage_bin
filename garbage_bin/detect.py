@@ -6,6 +6,7 @@ import shutil
 import time
 from datetime import date, datetime
 from io import BytesIO
+from typing import Any
 
 import requests
 import torch
@@ -33,7 +34,7 @@ def get_session():
     return _session
 
 
-def sanitize(j: dict[str, any]) -> dict[str, any]:
+def sanitize(j: dict[str, Any]) -> dict[str, Any]:
     o = {}
     for k, v in j.items():
         o[k.replace(" ", "_")] = v
