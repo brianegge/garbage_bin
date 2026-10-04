@@ -21,7 +21,7 @@ jobs:
       with:
         enable-cache: true
     - name: Set up Python
-      run: uv python install 3.13
+      run: uv python install 3.14
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -29,5 +29,9 @@ jobs:
         uv sync --extra dev
     - name: Lint with ruff
       run: uv run ruff check .
+    - name: Type check with ty
+      # `uv check` is experimental; report, don't block, until it settles.
+      continue-on-error: true
+      run: uv check --extra dev
     - name: Run tests
       run: uv run pytest

@@ -3,7 +3,7 @@ name = "garbage_bin"
 version = "0.1.0"
 description = ""
 authors = [{ name = "Brian Egge", email = "brianegge@gmail.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "ultralytics==8.4.172",
     "pillow>=12.0.0",
@@ -18,7 +18,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.0",
-    "black>=25.0.0",
     "coverage>=7.6.4",
     "pytest-cov>=7.0.0",
     "ruff>=0.14.0",
@@ -36,7 +35,7 @@ testpaths = ["tests"]
 pythonpath = "garbage_bin"
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -57,3 +56,8 @@ ignore = ["E203", "E501"]
 
 [tool.pyright]
 include = ["garbage_bin", "tests"]
+
+[tool.ty.environment]
+# The app imports its siblings flat (`from device import Device`), as pytest's
+# pythonpath above does.
+extra-paths = ["garbage_bin"]

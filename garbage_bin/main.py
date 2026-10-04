@@ -611,7 +611,11 @@ def main():
         finally:
             # In the finally block so a cycle that failed to reach the camera
             # still reports, and so a held cycle still reports.
-            if camera_is_blind(camera_failing_since):
+            # The None check is camera_is_blind()'s own first test, repeated so
+            # the type checker can see camera_failing_since is a float below.
+            if camera_failing_since is not None and camera_is_blind(
+                camera_failing_since
+            ):
                 camera_available = publish_camera_availability(
                     mqtt_client,
                     False,

@@ -6,6 +6,7 @@ import shutil
 import time
 from datetime import date, datetime
 from io import BytesIO
+from typing import Any
 
 import requests
 import torch
@@ -33,7 +34,7 @@ def get_session():
     return _session
 
 
-def sanitize(j: dict[str, any]) -> dict[str, any]:
+def sanitize(j: dict[str, Any]) -> dict[str, Any]:
     o = {}
     for k, v in j.items():
         o[k.replace(" ", "_")] = v
@@ -195,7 +196,9 @@ def get_image(camera, timeout=15):
     session = get_session()
     resize = camera.get("resize")
     primary = camera.get("url")
-    direct = f"http://{camera['host']}/cgi-bin/snapshot.cgi" if camera.get("host") else None
+    direct = (
+        f"http://{camera['host']}/cgi-bin/snapshot.cgi" if camera.get("host") else None
+    )
 
     if primary and direct and time.monotonic() < _primary_down_until:
         primary = None  # still cooling down; go straight to the camera

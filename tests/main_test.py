@@ -694,9 +694,7 @@ def test_camera_availability_published_on_first_call(mocker):
 
     client = mocker.MagicMock()
     assert publish_camera_availability(client, True, None) is True
-    client.publish.assert_called_once_with(
-        CAMERA_STATUS_TOPIC, "online", retain=True
-    )
+    client.publish.assert_called_once_with(CAMERA_STATUS_TOPIC, "online", retain=True)
 
 
 def test_camera_availability_is_not_republished_when_unchanged(mocker):
@@ -715,10 +713,10 @@ def test_camera_availability_publishes_offline_on_change(mocker, caplog):
 
     client = mocker.MagicMock()
     with caplog.at_level(logging.WARNING):
-        assert publish_camera_availability(client, False, True, blind_for=133.0) is False
-    client.publish.assert_called_once_with(
-        CAMERA_STATUS_TOPIC, "offline", retain=True
-    )
+        assert (
+            publish_camera_availability(client, False, True, blind_for=133.0) is False
+        )
+    client.publish.assert_called_once_with(CAMERA_STATUS_TOPIC, "offline", retain=True)
     assert "133s" in caplog.text
 
 
