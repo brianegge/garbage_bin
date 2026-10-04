@@ -90,6 +90,21 @@ HOLD_PERSON = "person in garage"
 HOLD_NO_OBJECTS = "no objects detected"
 HOLD_PERSON_RECENT = "person recently left"
 
+# Person presence comes from Frigate, which watches the same camera, rather than
+# from this model's own person class. Under IR the model scored a bag and lid in
+# the bottom-left corner as a person (0.25-0.45) in 82 of 96 frames sampled over
+# 2026-10-01..04, holding every presence entity frozen for 13-16 h a night.
+# Frigate's tracker never saw that person. The model's person score is only the
+# fallback for when Frigate cannot vouch for the camera.
+FRIGATE_PERSON_TOPIC = "frigate/garage/person"
+FRIGATE_STATS_TOPIC = "frigate/stats"
+FRIGATE_CAMERA = "garage"
+# Frigate publishes stats every 60 s. Three missed intervals, or a camera that
+# is not delivering frames (go2rtc has stalled this stream at 0 fps before),
+# and its zero person count proves nothing.
+FRIGATE_STATS_MAX_AGE_SECONDS = 180
+FRIGATE_MIN_CAMERA_FPS = 1.0
+
 
 _process = psutil.Process()
 
@@ -135,15 +150,64 @@ def get_health_status(memory_mb, inference_ms, camera_ms, camera_ok, hold_cycles
     return "healthy"
 
 
-def get_hold_reason(objects):
+class FrigatePersons:
+    """Frigate's person count for the garage camera, fed from MQTT.
+
+    The count topic is not retained and only changes on an edge, so it starts
+    at 0: a person already standing in the garage when this process starts is
+    missed until Frigate's count next changes.
+    """
+
+    def __init__(self):
+        self.count = 0
+        self.camera_fps = None
+        self.stats_at = None
+
+    def on_count(self, payload):
+        try:
+            self.count = int(payload)
+        except ValueError:
+            log.warning("Unexpected Frigate person count: %r", payload)
+
+    def on_stats(self, payload, now=None):
+        try:
+            camera = json.loads(payload)["cameras"][FRIGATE_CAMERA]
+            self.camera_fps = float(camera["camera_fps"])
+        except ValueError, KeyError, TypeError:
+            log.warning("Frigate stats without camera %s", FRIGATE_CAMERA)
+            self.camera_fps = None
+        self.stats_at = time.monotonic() if now is None else now
+
+    def person_present(self, now=None):
+        """True/False from Frigate, or None when Frigate cannot be trusted."""
+        if now is None:
+            now = time.monotonic()
+        if (
+            self.stats_at is None
+            or now - self.stats_at > FRIGATE_STATS_MAX_AGE_SECONDS
+            or self.camera_fps is None
+            or self.camera_fps < FRIGATE_MIN_CAMERA_FPS
+        ):
+            return None
+        return self.count > 0
+
+
+def get_hold_reason(objects, frigate_person=None):
     """Return why detections should not update state, or None to proceed.
 
     A person in frame may be standing between the camera and a vehicle, so a
     zero score for that vehicle means nothing. A frame with no detections at
     all is not an empty garage, it is a black or broken image; recognizing any
     one object is enough to trust the rest of the frame.
+
+    frigate_person is Frigate's verdict (True/False) and overrides this model's
+    person score; None falls back to the model.
     """
-    if objects.get("person", 0.0) > PERSON_HOLD_CONFIDENCE:
+    if frigate_person is None:
+        person = objects.get("person", 0.0) > PERSON_HOLD_CONFIDENCE
+    else:
+        person = frigate_person
+    if person:
         return HOLD_PERSON
     if not set(objects) - SYNTHETIC_KEYS:
         return HOLD_NO_OBJECTS
@@ -193,7 +257,7 @@ def camera_is_blind(failing_since, now=None):
     return (now - failing_since) >= CAMERA_UNAVAILABLE_AFTER_SECONDS
 
 
-def resolve_hold(objects, person_seen_at, now=None):
+def resolve_hold(objects, person_seen_at, now=None, frigate_person=None):
     """Combine the frame's hold reason with the person-exit grace period.
 
     Returns (hold_reason, person_seen_at). A person in frame stamps the
@@ -204,7 +268,7 @@ def resolve_hold(objects, person_seen_at, now=None):
     """
     if now is None:
         now = time.monotonic()
-    reason = get_hold_reason(objects)
+    reason = get_hold_reason(objects, frigate_person)
     if reason == HOLD_PERSON:
         return reason, now
     if (
@@ -317,6 +381,11 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.publish("garagecam/status", "online", retain=True)
     client.publish("garagecam/process/state", "running", retain=True)
     client.publish("garagecam/version/state", get_version(), retain=True)
+    # Subscribe here, not once at startup: a reconnect starts a clean session
+    # and drops every subscription.
+    client.subscribe("homeassistant/status")
+    client.subscribe(FRIGATE_PERSON_TOPIC)
+    client.subscribe(FRIGATE_STATS_TOPIC)
     # Republish discovery so HA recovers from a broker restart that drops retained messages.
     if userdata:
         publish_discovery(client, userdata["devices"], userdata["lwt"])
@@ -457,7 +526,15 @@ def publish_discovery(mqtt_client, devices, lwt):
 
 
 def on_message(mqtt_client, userdata, msg):
-    if msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
+    frigate = (userdata or {}).get("frigate")
+    if msg.topic == FRIGATE_PERSON_TOPIC:
+        if frigate is not None:
+            frigate.on_count(msg.payload.decode())
+            log.info("Frigate person count: %s", frigate.count)
+    elif msg.topic == FRIGATE_STATS_TOPIC:
+        if frigate is not None:
+            frigate.on_stats(msg.payload.decode())
+    elif msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
         log.info("Home Assistant came online, re-publishing discovery configs")
         publish_discovery(mqtt_client, userdata["devices"], userdata["lwt"])
     else:
@@ -497,13 +574,14 @@ def main():
     config = load_config()
     mqtt_config = get_section(config, "mqtt")
     lwt = "garagecam/status"
+    frigate = FrigatePersons()
     devices = list(
         map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
     )
     mqtt_client = paho.Client(
         paho.CallbackAPIVersion.VERSION2,
         "garage-cam",
-        userdata={"devices": devices, "lwt": lwt},
+        userdata={"devices": devices, "lwt": lwt, "frigate": frigate},
     )
     mqtt_client.will_set(lwt, "offline", retain=True)
     mqtt_client.enable_logger(logger=log)
@@ -517,7 +595,6 @@ def main():
         "Connecting to MQTT broker at %s:%s", mqtt_config["host"], mqtt_config["port"]
     )
     connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
-    mqtt_client.subscribe("homeassistant/status")
     mqtt_client.loop_start()
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
@@ -563,7 +640,9 @@ def main():
                 inference_times, inference_ms, "Inference", INFERENCE_TIME_WARNING_MS
             )
 
-            hold_reason, person_seen_at = resolve_hold(objects, person_seen_at)
+            hold_reason, person_seen_at = resolve_hold(
+                objects, person_seen_at, frigate_person=frigate.person_present()
+            )
             if hold_reason:
                 hold_cycles += 1
                 if hold_cycles % MAX_HOLD_CYCLES == 0:

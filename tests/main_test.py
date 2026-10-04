@@ -9,6 +9,7 @@ from garbage_bin.main import (
     HOLD_PERSON_RECENT,
     MAX_HOLD_CYCLES,
     PERSON_EXIT_GRACE_SECONDS,
+    FrigatePersons,
     connect_mqtt,
     get_device_info,
     get_health_status,
@@ -524,7 +525,7 @@ def test_on_message_ignores_ha_offline(mocker):
 
 
 def test_main_setup_and_immediate_exit(mocker):
-    """Exercise main() setup: MQTT wiring, subscribe, and callback registration."""
+    """Exercise main() setup: MQTT wiring and callback registration."""
     mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
     mocker.patch("garbage_bin.main.YOLO")
     config = configparser.ConfigParser()
@@ -556,8 +557,9 @@ def test_main_setup_and_immediate_exit(mocker):
     assert "devices" in call_kwargs.kwargs["userdata"]
     assert call_kwargs.kwargs["userdata"]["lwt"] == "garagecam/status"
     assert len(call_kwargs.kwargs["userdata"]["devices"]) == 3
-    # Verify subscribed to homeassistant/status
-    mock_client_instance.subscribe.assert_called_once_with("homeassistant/status")
+    # Subscribing is on_connect's job, so it survives a reconnect.
+    mock_client_instance.subscribe.assert_not_called()
+    assert isinstance(call_kwargs.kwargs["userdata"]["frigate"], FrigatePersons)
     # Discovery is now driven by on_connect, not main(), so main() should not call it directly.
     mock_publish_disc.assert_not_called()
     # Verify on_message callback was wired
@@ -786,3 +788,98 @@ def test_sustained_failure_marks_entities_unavailable(mocker):
     spy = _run_one_failing_cycle(mocker, blind=True)
     spy.assert_called_once()
     assert spy.call_args.args[1] is False  # available=False
+
+
+def test_on_connect_subscribes_every_time(mocker):
+    """A reconnect starts a clean session, so on_connect must resubscribe."""
+    from garbage_bin.main import FRIGATE_PERSON_TOPIC, FRIGATE_STATS_TOPIC
+
+    client = mocker.MagicMock()
+    on_connect(client, None, None, 0, None)
+    on_connect(client, None, None, 0, None)
+    topics = [c.args[0] for c in client.subscribe.call_args_list]
+    for topic in ("homeassistant/status", FRIGATE_PERSON_TOPIC, FRIGATE_STATS_TOPIC):
+        assert topics.count(topic) == 2
+
+
+def _stats(fps):
+    return json.dumps({"cameras": {"garage": {"camera_fps": fps}}})
+
+
+def test_frigate_unknown_until_stats_arrive():
+    frigate = FrigatePersons()
+    frigate.on_count("1")
+    assert frigate.person_present(now=100.0) is None
+
+
+def test_frigate_trusted_with_fresh_stats():
+    frigate = FrigatePersons()
+    frigate.on_stats(_stats(5.1), now=100.0)
+    assert frigate.person_present(now=130.0) is False
+    frigate.on_count("2")
+    assert frigate.person_present(now=130.0) is True
+    frigate.on_count("0")
+    assert frigate.person_present(now=130.0) is False
+
+
+def test_frigate_untrusted_when_stats_go_stale():
+    frigate = FrigatePersons()
+    frigate.on_stats(_stats(5.1), now=100.0)
+    assert frigate.person_present(now=100.0 + 181) is None
+
+
+def test_frigate_untrusted_when_its_camera_is_stalled():
+    """go2rtc has stalled this stream at 0 fps; a zero count then proves nothing."""
+    frigate = FrigatePersons()
+    frigate.on_stats(_stats(0.0), now=100.0)
+    assert frigate.person_present(now=110.0) is None
+
+
+def test_frigate_stats_without_the_camera_are_untrusted():
+    frigate = FrigatePersons()
+    frigate.on_stats(json.dumps({"cameras": {}}), now=100.0)
+    assert frigate.person_present(now=110.0) is None
+
+
+def test_frigate_ignores_garbage_count():
+    frigate = FrigatePersons()
+    frigate.on_count("1")
+    frigate.on_count("not a number")
+    assert frigate.count == 1
+
+
+def test_frigate_verdict_overrides_model_phantom():
+    """The IR phantom: the model scores the corner bag as a person, Frigate doesn't."""
+    objects = {"honda_civic": 0.95, "person": 0.45}
+    assert get_hold_reason(objects, frigate_person=False) is None
+    assert get_hold_reason(objects) == "person in garage"
+
+
+def test_frigate_person_holds_even_when_model_sees_none():
+    objects = {"honda_civic": 0.95}
+    assert get_hold_reason(objects, frigate_person=True) == "person in garage"
+
+
+def test_frigate_person_still_gets_exit_grace():
+    _, seen_at = resolve_hold(
+        {"honda_civic": 0.95}, None, now=100.0, frigate_person=True
+    )
+    reason, _ = resolve_hold(
+        {"honda_civic": 0.95}, seen_at, now=130.0, frigate_person=False
+    )
+    assert reason == "person recently left"
+
+
+def test_on_message_routes_frigate_topics(mocker):
+    from garbage_bin.main import FRIGATE_PERSON_TOPIC, FRIGATE_STATS_TOPIC
+
+    frigate = FrigatePersons()
+    userdata = {"devices": [], "lwt": "garagecam/status", "frigate": frigate}
+    msg = mocker.MagicMock()
+    msg.topic = FRIGATE_STATS_TOPIC
+    msg.payload.decode.return_value = _stats(5.0)
+    on_message(mocker.MagicMock(), userdata, msg)
+    msg.topic = FRIGATE_PERSON_TOPIC
+    msg.payload.decode.return_value = "1"
+    on_message(mocker.MagicMock(), userdata, msg)
+    assert frigate.person_present() is True
