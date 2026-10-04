@@ -195,7 +195,9 @@ def get_image(camera, timeout=15):
     session = get_session()
     resize = camera.get("resize")
     primary = camera.get("url")
-    direct = f"http://{camera['host']}/cgi-bin/snapshot.cgi" if camera.get("host") else None
+    direct = (
+        f"http://{camera['host']}/cgi-bin/snapshot.cgi" if camera.get("host") else None
+    )
 
     if primary and direct and time.monotonic() < _primary_down_until:
         primary = None  # still cooling down; go straight to the camera
