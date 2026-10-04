@@ -118,7 +118,7 @@ def test_graceful_shutdown_publishes_and_disconnects(mocker):
     sd = mocker.MagicMock()
     graceful_shutdown(client, "garagecam/status", sd)
     client.publish.assert_any_call("garagecam/process/state", "stopped", retain=True)
-    client.publish.assert_any_call("garagecam/status", payload="offline", retain=True)
+    client.publish.assert_any_call("garagecam/status", payload="stopped", retain=True)
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
     sd.notify.assert_called_with("STATUS=Graceful Exit")
@@ -133,7 +133,7 @@ def test_graceful_shutdown_handles_publish_failure(mocker, caplog):
     sd = mocker.MagicMock()
     with caplog.at_level(logging.WARNING):
         graceful_shutdown(client, "garagecam/status", sd)
-    assert "Could not publish offline status" in caplog.text
+    assert "Could not publish stopped status" in caplog.text
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
 
@@ -591,6 +591,41 @@ def test_presence_entities_require_both_process_and_camera_availability(mocker):
     assert cfg["availability_mode"] == "all"
     # The old single-topic form must be gone, or HA ignores the list.
     assert "availability_topic" not in cfg
+
+
+def test_graceful_stop_makes_every_process_entity_unavailable(mocker):
+    """A graceful exit publishes "stopped", which HA would ignore by default.
+
+    HA only treats payload_not_available ("offline") as unavailable; any other
+    payload leaves the entity available with its last state. Every entity gated
+    on the process must therefore map "stopped" to unavailable too.
+    """
+    from jinja2 import Template
+
+    client = mocker.Mock()
+    device = mocker.Mock()
+    device.name = "Honda Civic"
+    device.hass_name = "honda_civic"
+    publish_discovery(client, [device], "garagecam/status")
+    configs = {
+        c.args[0]: json.loads(c.args[1])
+        for c in client.publish.call_args_list
+        if c.args and "config" in c.args[0]
+    }
+    templates = []
+    for cfg in configs.values():
+        if cfg.get("availability_topic") == "garagecam/status":
+            templates.append(cfg["availability_template"])
+        for entry in cfg.get("availability", []):
+            if entry["topic"] == "garagecam/status":
+                templates.append(entry["value_template"])
+    # Civic, NFS, process, health and version.
+    assert len(templates) == 5
+    for tpl in templates:
+        render = Template(tpl).render
+        assert render(value="online") == "online"
+        assert render(value="stopped") == "offline"
+        assert render(value="offline") == "offline"
 
 
 def test_status_entity_stays_available_when_the_camera_is_down(mocker):

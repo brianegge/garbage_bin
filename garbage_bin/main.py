@@ -62,6 +62,16 @@ SYNTHETIC_KEYS = frozenset({"something"})
 # Separate from the process LWT: the process can be perfectly healthy while
 # blind. Presence entities gate on both.
 CAMERA_STATUS_TOPIC = "garagecam/camera/status"
+
+# The process status topic (the LWT) carries three values: "online", "offline"
+# (the broker's LWT -- the process died or lost the broker) and "stopped" (a
+# graceful exit, e.g. podman auto-update). HA's default payload_not_available is
+# "offline" and other payloads are ignored, so without this template a graceful
+# exit would leave every entity available and repeating its last state. The
+# status sensor itself shows the raw value, which is what lets an automation
+# tell a planned restart from a crash.
+PROCESS_AVAILABILITY_TEMPLATE = "{{ 'online' if value == 'online' else 'offline' }}"
+
 # How long the camera must stay unreadable before the presence entities are
 # declared unavailable. The camera reboots itself weekly and takes a minute or
 # so to come back; flapping every entity unavailable and back on a scheduled
@@ -364,7 +374,7 @@ def publish_discovery(mqtt_client, devices, lwt):
             # on, so Home Assistant saw a healthy sensor repeating a stale
             # value. availability_mode "all" requires both topics to be online.
             "availability": [
-                {"topic": lwt},
+                {"topic": lwt, "value_template": PROCESS_AVAILABILITY_TEMPLATE},
                 {"topic": CAMERA_STATUS_TOPIC},
             ],
             "availability_mode": "all",
@@ -381,6 +391,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "device_class": "problem",
         "uniq_id": "garagecam-nfs_storage",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -393,6 +404,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "state_topic": "garagecam/process/state",
         "uniq_id": "garagecam-process",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -407,6 +419,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "json_attributes_topic": "garagecam/health",
         "uniq_id": "garagecam-health",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -432,6 +445,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "uniq_id": "garagecam-version",
         "entity_category": "diagnostic",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -628,10 +642,12 @@ def main():
 def graceful_shutdown(mqtt_client, lwt, sd):
     try:
         mqtt_client.publish("garagecam/process/state", "stopped", retain=True)
-        publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
+        # "stopped", not "offline": a planned exit, so HA can wait for the
+        # replacement instead of alerting. "offline" is left to the LWT.
+        publish_result = mqtt_client.publish(lwt, payload="stopped", retain=True)
         publish_result.wait_for_publish(timeout=5)
     except (RuntimeError, ValueError, OSError) as e:
-        log.warning("Could not publish offline status: %s", e)
+        log.warning("Could not publish stopped status: %s", e)
     mqtt_client.disconnect()  # disconnect gracefully
     mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
