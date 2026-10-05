@@ -570,7 +570,8 @@ def main():
 
     sd = sdnotify.SystemdNotifier()
     sd.notify("STATUS=Loading")
-    model = YOLO("best.pt")  # pretrained YOLOv8n model
+    # Trained on this garage camera (Roboflow egge-public/garage).
+    model = YOLO("best.pt")
     config = load_config()
     mqtt_config = get_section(config, "mqtt")
     lwt = "garagecam/status"
