@@ -1,20 +1,32 @@
 import configparser
+import json
 
 import pytest
 
 from garbage_bin.main import (
+    HOLD_NO_OBJECTS,
+    HOLD_PERSON,
+    HOLD_PERSON_RECENT,
+    MAX_HOLD_CYCLES,
+    PERSON_EXIT_GRACE_SECONDS,
+    FrigatePersons,
     connect_mqtt,
     get_device_info,
     get_health_status,
+    get_hold_reason,
     get_section,
     get_version,
     graceful_shutdown,
+    interruptible_sleep,
     load_config,
     main,
     on_connect,
     on_disconnect,
     on_message,
     publish_discovery,
+    publish_health,
+    resolve_hold,
+    track_spike,
 )
 
 
@@ -107,7 +119,7 @@ def test_graceful_shutdown_publishes_and_disconnects(mocker):
     sd = mocker.MagicMock()
     graceful_shutdown(client, "garagecam/status", sd)
     client.publish.assert_any_call("garagecam/process/state", "stopped", retain=True)
-    client.publish.assert_any_call("garagecam/status", payload="offline", retain=True)
+    client.publish.assert_any_call("garagecam/status", payload="stopped", retain=True)
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
     sd.notify.assert_called_with("STATUS=Graceful Exit")
@@ -122,7 +134,7 @@ def test_graceful_shutdown_handles_publish_failure(mocker, caplog):
     sd = mocker.MagicMock()
     with caplog.at_level(logging.WARNING):
         graceful_shutdown(client, "garagecam/status", sd)
-    assert "Could not publish offline status" in caplog.text
+    assert "Could not publish stopped status" in caplog.text
     client.disconnect.assert_called_once()
     client.loop_stop.assert_called_once()
 
@@ -185,24 +197,189 @@ def test_get_device_info(mocker):
 
 
 def test_get_health_status_healthy():
-    assert get_health_status(200, 100, True) == "healthy"
+    assert get_health_status(200, 100, 500, True) == "healthy"
 
 
 def test_get_health_status_camera_error():
-    assert get_health_status(200, 100, False) == "camera_error"
+    assert get_health_status(200, 100, 500, False) == "camera_error"
 
 
 def test_get_health_status_degraded_memory():
-    assert get_health_status(600, 100, True) == "degraded"
+    assert get_health_status(1300, 100, 500, True) == "degraded"
 
 
 def test_get_health_status_degraded_inference():
-    assert get_health_status(200, 400, True) == "degraded"
+    assert get_health_status(200, 1500, 500, True) == "degraded"
+
+
+def test_get_health_status_degraded_camera_time():
+    """A slow camera fetch degrades health on its own."""
+    assert get_health_status(200, 100, 4000, True) == "degraded"
+
+
+def test_get_health_status_degraded_while_stuck_holding():
+    assert get_health_status(200, 100, 500, True, MAX_HOLD_CYCLES) == "degraded"
+
+
+def test_get_health_status_normal_operating_range_is_healthy():
+    """The observed steady state (~940MB, ~300ms inference) is not degraded."""
+    assert get_health_status(940, 300, 1100, True) == "healthy"
 
 
 def test_get_health_status_camera_error_takes_priority():
     """Camera error takes priority over degraded metrics."""
-    assert get_health_status(600, 400, False) == "camera_error"
+    assert get_health_status(1300, 1500, 4000, False) == "camera_error"
+
+
+def test_get_hold_reason_none_when_scene_is_clear():
+    assert get_hold_reason({"tool_bucket": 0.9, "honda_civic": 0.95}) is None
+
+
+def test_get_hold_reason_person_below_old_threshold():
+    """A person at 0.4 used to pass the gate and zero out an occluded car."""
+    reason = get_hold_reason({"tool_bucket": 0.9, "person": 0.4})
+    assert reason == "person in garage"
+
+
+def test_get_hold_reason_ignores_faint_person():
+    assert get_hold_reason({"tool_bucket": 0.9, "person": 0.1}) is None
+
+
+def test_get_hold_reason_single_object_is_enough():
+    """One recognized object proves the frame is not black, whichever it is."""
+    assert get_hold_reason({"honda_civic": 0.95, "something": -1.0}) is None
+
+
+def test_get_hold_reason_empty_frame():
+    """No detections at all means a broken image, not an empty garage."""
+    assert get_hold_reason({"something": -1.0}) == "no objects detected"
+
+
+def test_get_hold_reason_no_detections_whatsoever():
+    assert get_hold_reason({}) == "no objects detected"
+
+
+def test_get_hold_reason_person_takes_priority():
+    assert get_hold_reason({"person": 0.9}) == "person in garage"
+
+
+def test_resolve_hold_person_stamps_sighting_time():
+    reason, seen_at = resolve_hold({"person": 0.9}, None, now=100.0)
+    assert reason == HOLD_PERSON
+    assert seen_at == 100.0
+
+
+def test_resolve_hold_clear_frame_within_grace_holds():
+    """A departing car occludes the bin right after the person vanishes into
+    it; the grace hold covers that window."""
+    reason, seen_at = resolve_hold({"honda_civic": 0.95}, 100.0, now=130.0)
+    assert reason == HOLD_PERSON_RECENT
+    assert seen_at == 100.0
+
+
+def test_resolve_hold_grace_expires_by_wall_clock():
+    reason, seen_at = resolve_hold(
+        {"honda_civic": 0.95}, 100.0, now=100.0 + PERSON_EXIT_GRACE_SECONDS
+    )
+    assert reason is None
+    assert seen_at == 100.0
+
+
+def test_resolve_hold_no_person_ever_seen():
+    reason, seen_at = resolve_hold({"honda_civic": 0.95}, None, now=100.0)
+    assert reason is None
+    assert seen_at is None
+
+
+def test_resolve_hold_person_rearms_mid_grace():
+    _, seen_at = resolve_hold({"person": 0.9}, 100.0, now=130.0)
+    assert seen_at == 130.0
+
+
+def test_resolve_hold_black_frame_preserves_stamp():
+    """An unreadable frame holds on its own merits and leaves the stamp
+    alone — wall-clock aging still runs underneath it."""
+    reason, seen_at = resolve_hold({"something": -1.0}, 100.0, now=130.0)
+    assert reason == HOLD_NO_OBJECTS
+    assert seen_at == 100.0
+
+
+def test_resolve_hold_grace_ages_out_during_outage():
+    """A camera outage after a person leaves must not preserve the grace:
+    on recovery, a stale sighting no longer holds."""
+    reason, seen_at = resolve_hold({"honda_civic": 0.95}, 100.0, now=1300.0)
+    assert reason is None
+    assert seen_at == 100.0
+
+
+def test_track_spike_warns_above_average(caplog):
+    import logging
+
+    samples = [100] * 10
+    with caplog.at_level(logging.WARNING):
+        track_spike(samples, 5000, "Camera fetch", 3000)
+    assert "Camera fetch time spike: 5000ms" in caplog.text
+
+
+def test_track_spike_quiet_below_threshold(caplog):
+    import logging
+
+    samples = [100] * 10
+    with caplog.at_level(logging.WARNING):
+        track_spike(samples, 900, "Camera fetch", 3000)
+    assert caplog.text == ""
+
+
+def test_track_spike_trims_samples():
+    samples = list(range(100))
+    track_spike(samples, 1, "Camera fetch", 3000)
+    assert len(samples) == 50
+
+
+def test_interruptible_sleep_returns_early_when_killed(mocker):
+    killer = mocker.Mock()
+    killer.kill_now = True
+    sleep = mocker.patch("garbage_bin.main.time.sleep")
+    interruptible_sleep(60, killer)
+    sleep.assert_not_called()
+
+
+def test_interruptible_sleep_skips_negative_delay(mocker):
+    killer = mocker.Mock()
+    killer.kill_now = False
+    sleep = mocker.patch("garbage_bin.main.time.sleep")
+    interruptible_sleep(-5, killer)
+    sleep.assert_not_called()
+
+
+def test_publish_health_reports_camera_error(mocker):
+    """A cycle that never reached the camera must still publish."""
+    import json
+
+    mqtt_client = mocker.Mock()
+    mocker.patch(
+        "garbage_bin.main.get_health_metrics",
+        return_value={"memory_mb": 400.0, "memory_percent": 2.5},
+    )
+    publish_health(mqtt_client, 0, 0, False, 0)
+    topic, payload = mqtt_client.publish.call_args[0]
+    assert topic == "garagecam/health"
+    assert json.loads(payload)["status"] == "camera_error"
+
+
+def test_publish_health_splits_camera_and_inference(mocker):
+    import json
+
+    mqtt_client = mocker.Mock()
+    mocker.patch(
+        "garbage_bin.main.get_health_metrics",
+        return_value={"memory_mb": 400.0, "memory_percent": 2.5},
+    )
+    publish_health(mqtt_client, 2400, 280, True, 3)
+    payload = json.loads(mqtt_client.publish.call_args[0][1])
+    assert payload["camera_ms"] == 2400
+    assert payload["inference_ms"] == 280
+    assert payload["hold_cycles"] == 3
 
 
 def test_publish_discovery_publishes_all_entities(mocker):
@@ -234,8 +411,7 @@ def test_publish_discovery_payload_contents(mocker):
     device.hass_name = "honda_civic"
     publish_discovery(client, [device], "garagecam/status")
     payloads = {
-        call.args[0]: json.loads(call.args[1])
-        for call in client.publish.call_args_list
+        call.args[0]: json.loads(call.args[1]) for call in client.publish.call_args_list
     }
     # Binary sensor for device
     civic = payloads["homeassistant/binary_sensor/honda_civic/config"]
@@ -243,7 +419,14 @@ def test_publish_discovery_payload_contents(mocker):
     assert civic["state_topic"] == "honda_civic/state"
     assert civic["device_class"] == "presence"
     assert civic["uniq_id"] == "garagecam-honda_civic"
-    assert civic["availability_topic"] == "garagecam/status"
+    # Presence entities gate on the process LWT *and* the camera: a live
+    # process that cannot fetch a frame is still blind, and must not keep
+    # reporting the last position it happened to see.
+    assert {a["topic"] for a in civic["availability"]} == {
+        "garagecam/status",
+        "garagecam/camera/status",
+    }
+    assert civic["availability_mode"] == "all"
     assert civic["device"]["sw_version"] == "v2.0.0"
     # NFS storage
     nfs = payloads["homeassistant/binary_sensor/garagecam-nfs_storage/config"]
@@ -342,7 +525,7 @@ def test_on_message_ignores_ha_offline(mocker):
 
 
 def test_main_setup_and_immediate_exit(mocker):
-    """Exercise main() setup: MQTT wiring, subscribe, and callback registration."""
+    """Exercise main() setup: MQTT wiring and callback registration."""
     mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
     mocker.patch("garbage_bin.main.YOLO")
     config = configparser.ConfigParser()
@@ -374,9 +557,329 @@ def test_main_setup_and_immediate_exit(mocker):
     assert "devices" in call_kwargs.kwargs["userdata"]
     assert call_kwargs.kwargs["userdata"]["lwt"] == "garagecam/status"
     assert len(call_kwargs.kwargs["userdata"]["devices"]) == 3
-    # Verify subscribed to homeassistant/status
-    mock_client_instance.subscribe.assert_called_once_with("homeassistant/status")
+    # Subscribing is on_connect's job, so it survives a reconnect.
+    mock_client_instance.subscribe.assert_not_called()
+    assert isinstance(call_kwargs.kwargs["userdata"]["frigate"], FrigatePersons)
     # Discovery is now driven by on_connect, not main(), so main() should not call it directly.
     mock_publish_disc.assert_not_called()
     # Verify on_message callback was wired
     assert mock_client_instance.on_message is not None
+
+
+def test_presence_entities_require_both_process_and_camera_availability(mocker):
+    """A live process that cannot see is still blind.
+
+    Blue Iris being powered down on 2026-09-05 left binary_sensor.honda_civic
+    reading "home" for 18h after the car had gone: every frame fetch timed out
+    while MQTT publishing carried on, so Home Assistant saw a healthy sensor
+    repeating a stale value. Gating on the process LWT alone cannot catch that.
+    """
+    from garbage_bin.main import CAMERA_STATUS_TOPIC
+
+    client = mocker.Mock()
+    device = mocker.Mock()
+    device.name = "Honda Civic"
+    device.hass_name = "honda_civic"
+    publish_discovery(client, [device], "garagecam/status")
+
+    configs = {
+        c.args[0]: json.loads(c.args[1])
+        for c in client.publish.call_args_list
+        if c.args and "config" in c.args[0]
+    }
+    cfg = configs["homeassistant/binary_sensor/honda_civic/config"]
+    topics = {a["topic"] for a in cfg["availability"]}
+    assert topics == {"garagecam/status", CAMERA_STATUS_TOPIC}
+    assert cfg["availability_mode"] == "all"
+    # The old single-topic form must be gone, or HA ignores the list.
+    assert "availability_topic" not in cfg
+
+
+def test_graceful_stop_makes_every_process_entity_unavailable(mocker):
+    """A graceful exit publishes "stopped", which HA would ignore by default.
+
+    HA only treats payload_not_available ("offline") as unavailable; any other
+    payload leaves the entity available with its last state. Every entity gated
+    on the process must therefore map "stopped" to unavailable too.
+    """
+    from jinja2 import Template
+
+    client = mocker.Mock()
+    device = mocker.Mock()
+    device.name = "Honda Civic"
+    device.hass_name = "honda_civic"
+    publish_discovery(client, [device], "garagecam/status")
+    configs = {
+        c.args[0]: json.loads(c.args[1])
+        for c in client.publish.call_args_list
+        if c.args and "config" in c.args[0]
+    }
+    templates = []
+    for cfg in configs.values():
+        if cfg.get("availability_topic") == "garagecam/status":
+            templates.append(cfg["availability_template"])
+        for entry in cfg.get("availability", []):
+            if entry["topic"] == "garagecam/status":
+                templates.append(entry["value_template"])
+    # Civic, NFS, process, health and version.
+    assert len(templates) == 5
+    for tpl in templates:
+        render = Template(tpl).render
+        assert render(value="online") == "online"
+        assert render(value="stopped") == "offline"
+        assert render(value="offline") == "offline"
+
+
+def test_status_entity_stays_available_when_the_camera_is_down(mocker):
+    """The diagnostic that explains the outage must not vanish with it."""
+    client = mocker.Mock()
+    publish_discovery(client, [], "garagecam/status")
+    configs = {
+        c.args[0]: json.loads(c.args[1])
+        for c in client.publish.call_args_list
+        if c.args and "config" in c.args[0]
+    }
+    status = configs["homeassistant/sensor/garagecam-status/config"]
+    assert "availability" not in status
+    assert "availability_topic" not in status
+
+
+def test_camera_blind_needs_the_full_window():
+    """A brief blip must not flap every presence entity unavailable."""
+    from garbage_bin.main import CAMERA_UNAVAILABLE_AFTER_SECONDS, camera_is_blind
+
+    assert camera_is_blind(None, now=1000) is False
+    started = 1000
+    assert camera_is_blind(started, now=started + 5) is False
+    assert camera_is_blind(started, now=started + 30) is False
+    assert (
+        camera_is_blind(started, now=started + CAMERA_UNAVAILABLE_AFTER_SECONDS - 1)
+        is False
+    )
+    assert (
+        camera_is_blind(started, now=started + CAMERA_UNAVAILABLE_AFTER_SECONDS) is True
+    )
+
+
+def test_weekly_camera_reboot_does_not_mark_entities_unavailable():
+    """The camera reboots itself weekly and takes ~60-90s to come back.
+
+    Nothing can drive in or out while it is down, so the last known state is
+    still correct; flapping every entity unavailable and back is worse.
+    """
+    from garbage_bin.main import camera_is_blind
+
+    reboot_start = 5000
+    for elapsed in (10, 30, 60, 90, 110):
+        assert camera_is_blind(reboot_start, now=reboot_start + elapsed) is False, (
+            f"a {elapsed}s reboot must not trip unavailability"
+        )
+
+
+def test_blind_window_is_wall_clock_not_cycles():
+    """A failing cycle costs the fetch timeout, not CYCLE_SECONDS.
+
+    With the direct fallback it costs two timeouts, so counting cycles would
+    stretch the window to several times its nominal length exactly when the
+    camera is down. Four slow cycles of 30s must be enough.
+    """
+    from garbage_bin.main import camera_is_blind
+
+    started = 0
+    assert camera_is_blind(started, now=4 * 30) is True
+
+
+def test_camera_availability_published_on_first_call(mocker):
+    """Nothing announced yet: HA must not be left waiting on a retained value
+    that was never published."""
+    from garbage_bin.main import CAMERA_STATUS_TOPIC, publish_camera_availability
+
+    client = mocker.MagicMock()
+    assert publish_camera_availability(client, True, None) is True
+    client.publish.assert_called_once_with(CAMERA_STATUS_TOPIC, "online", retain=True)
+
+
+def test_camera_availability_is_not_republished_when_unchanged(mocker):
+    """Publishing every cycle would be pointless broker traffic."""
+    from garbage_bin.main import publish_camera_availability
+
+    client = mocker.MagicMock()
+    assert publish_camera_availability(client, True, True) is True
+    client.publish.assert_not_called()
+
+
+def test_camera_availability_publishes_offline_on_change(mocker, caplog):
+    import logging
+
+    from garbage_bin.main import CAMERA_STATUS_TOPIC, publish_camera_availability
+
+    client = mocker.MagicMock()
+    with caplog.at_level(logging.WARNING):
+        assert (
+            publish_camera_availability(client, False, True, blind_for=133.0) is False
+        )
+    client.publish.assert_called_once_with(CAMERA_STATUS_TOPIC, "offline", retain=True)
+    assert "133s" in caplog.text
+
+
+def test_camera_availability_recovery_is_logged(mocker, caplog):
+    import logging
+
+    from garbage_bin.main import publish_camera_availability
+
+    client = mocker.MagicMock()
+    with caplog.at_level(logging.INFO):
+        assert publish_camera_availability(client, True, False) is True
+    assert "readable again" in caplog.text
+
+
+def _main_config():
+    config = configparser.ConfigParser()
+    config.add_section("mqtt")
+    config.set("mqtt", "host", "broker.local")
+    config.set("mqtt", "port", "1883")
+    config.set("mqtt", "user", "testuser")
+    config.set("mqtt", "password", "testpass")
+    config.add_section("camera")
+    config.add_section("file")
+    config.set("file", "path", "/tmp")
+    return config
+
+
+def _run_one_failing_cycle(mocker, blind):
+    """Drive main() through exactly one cycle in which the camera fetch fails."""
+    import requests
+
+    mocker.patch("garbage_bin.main.sdnotify.SystemdNotifier")
+    mocker.patch("garbage_bin.main.YOLO")
+    mocker.patch("garbage_bin.main.load_config", return_value=_main_config())
+    mocker.patch("garbage_bin.main.connect_mqtt")
+    mocker.patch("garbage_bin.main.publish_discovery")
+    mocker.patch("garbage_bin.main.graceful_shutdown")
+    mocker.patch("garbage_bin.main.interruptible_sleep")
+    mocker.patch("garbage_bin.main.sync_local_to_remote", return_value=True)
+    mocker.patch("garbage_bin.main.faulthandler")
+    mocker.patch(
+        "garbage_bin.main.get_image",
+        side_effect=requests.exceptions.ConnectTimeout("camera down"),
+    )
+    mocker.patch("garbage_bin.main.camera_is_blind", return_value=blind)
+    spy = mocker.patch(
+        "garbage_bin.main.publish_camera_availability", return_value=False
+    )
+    client = mocker.MagicMock()
+    mocker.patch("garbage_bin.main.paho.Client", return_value=client)
+    killer = mocker.patch("garbage_bin.main.GracefulKiller")
+    type(killer.return_value).kill_now = mocker.PropertyMock(
+        side_effect=[False, True, True]
+    )
+    main()
+    return spy
+
+
+def test_failed_fetch_alone_does_not_mark_unavailable(mocker):
+    """One failed frame is normal — the camera reboots weekly."""
+    spy = _run_one_failing_cycle(mocker, blind=False)
+    spy.assert_not_called()
+
+
+def test_sustained_failure_marks_entities_unavailable(mocker):
+    """Once blind past the window, presence entities must stop reporting."""
+    spy = _run_one_failing_cycle(mocker, blind=True)
+    spy.assert_called_once()
+    assert spy.call_args.args[1] is False  # available=False
+
+
+def test_on_connect_subscribes_every_time(mocker):
+    """A reconnect starts a clean session, so on_connect must resubscribe."""
+    from garbage_bin.main import FRIGATE_PERSON_TOPIC, FRIGATE_STATS_TOPIC
+
+    client = mocker.MagicMock()
+    on_connect(client, None, None, 0, None)
+    on_connect(client, None, None, 0, None)
+    topics = [c.args[0] for c in client.subscribe.call_args_list]
+    for topic in ("homeassistant/status", FRIGATE_PERSON_TOPIC, FRIGATE_STATS_TOPIC):
+        assert topics.count(topic) == 2
+
+
+def _stats(fps):
+    return json.dumps({"cameras": {"garage": {"camera_fps": fps}}})
+
+
+def test_frigate_unknown_until_stats_arrive():
+    frigate = FrigatePersons()
+    frigate.on_count("1")
+    assert frigate.person_present(now=100.0) is None
+
+
+def test_frigate_trusted_with_fresh_stats():
+    frigate = FrigatePersons()
+    frigate.on_stats(_stats(5.1), now=100.0)
+    assert frigate.person_present(now=130.0) is False
+    frigate.on_count("2")
+    assert frigate.person_present(now=130.0) is True
+    frigate.on_count("0")
+    assert frigate.person_present(now=130.0) is False
+
+
+def test_frigate_untrusted_when_stats_go_stale():
+    frigate = FrigatePersons()
+    frigate.on_stats(_stats(5.1), now=100.0)
+    assert frigate.person_present(now=100.0 + 181) is None
+
+
+def test_frigate_untrusted_when_its_camera_is_stalled():
+    """go2rtc has stalled this stream at 0 fps; a zero count then proves nothing."""
+    frigate = FrigatePersons()
+    frigate.on_stats(_stats(0.0), now=100.0)
+    assert frigate.person_present(now=110.0) is None
+
+
+def test_frigate_stats_without_the_camera_are_untrusted():
+    frigate = FrigatePersons()
+    frigate.on_stats(json.dumps({"cameras": {}}), now=100.0)
+    assert frigate.person_present(now=110.0) is None
+
+
+def test_frigate_ignores_garbage_count():
+    frigate = FrigatePersons()
+    frigate.on_count("1")
+    frigate.on_count("not a number")
+    assert frigate.count == 1
+
+
+def test_frigate_verdict_overrides_model_phantom():
+    """The IR phantom: the model scores the corner bag as a person, Frigate doesn't."""
+    objects = {"honda_civic": 0.95, "person": 0.45}
+    assert get_hold_reason(objects, frigate_person=False) is None
+    assert get_hold_reason(objects) == "person in garage"
+
+
+def test_frigate_person_holds_even_when_model_sees_none():
+    objects = {"honda_civic": 0.95}
+    assert get_hold_reason(objects, frigate_person=True) == "person in garage"
+
+
+def test_frigate_person_still_gets_exit_grace():
+    _, seen_at = resolve_hold(
+        {"honda_civic": 0.95}, None, now=100.0, frigate_person=True
+    )
+    reason, _ = resolve_hold(
+        {"honda_civic": 0.95}, seen_at, now=130.0, frigate_person=False
+    )
+    assert reason == "person recently left"
+
+
+def test_on_message_routes_frigate_topics(mocker):
+    from garbage_bin.main import FRIGATE_PERSON_TOPIC, FRIGATE_STATS_TOPIC
+
+    frigate = FrigatePersons()
+    userdata = {"devices": [], "lwt": "garagecam/status", "frigate": frigate}
+    msg = mocker.MagicMock()
+    msg.topic = FRIGATE_STATS_TOPIC
+    msg.payload.decode.return_value = _stats(5.0)
+    on_message(mocker.MagicMock(), userdata, msg)
+    msg.topic = FRIGATE_PERSON_TOPIC
+    msg.payload.decode.return_value = "1"
+    on_message(mocker.MagicMock(), userdata, msg)
+    assert frigate.person_present() is True

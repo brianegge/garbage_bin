@@ -17,12 +17,19 @@ repos:
   #   rev: 38.115.0
   #   hooks:
   #     - id: renovate-config-validator
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.4.2
+  # Ruff runs from the project environment, so the version is the one locked
+  # in uv.lock (and kept current by Renovate) -- the same one CI uses. A
+  # separately pinned ruff-pre-commit drifted to v0.4.2 against a locked 0.16,
+  # and the two formatted the same code differently.
+  - repo: local
     hooks:
-      # Run the linter.
       - id: ruff
-        args: [ --fix ]
-      # Run the formatter.
+        name: ruff check
+        entry: uv run --extra dev ruff check --fix
+        language: system
+        types_or: [python, pyi]
       - id: ruff-format
+        name: ruff format
+        entry: uv run --extra dev ruff format
+        language: system
+        types_or: [python, pyi]

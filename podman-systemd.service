@@ -36,8 +36,11 @@ ExecStart=/usr/bin/podman run \
         -v /home/brianegge/etc/config.ini:/app/config.ini \
         -v /data/capture:/data/capture --name garbage_bin_test \
 	--label io.containers.autoupdate=registry ghcr.io/brianegge/garbage_bin:latest
+# The loop can be inside a camera fetch (15s timeout) when SIGTERM lands, so
+# give it more than 10s to reach graceful_shutdown(). Otherwise podman SIGKILLs
+# it, the MQTT last-will fires, and every entity flips to unavailable.
 ExecStop=/usr/bin/podman stop \
-	--ignore -t 10 \
+	--ignore -t 30 \
 	--cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm \
 	-f \

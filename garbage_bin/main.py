@@ -23,10 +23,87 @@ from ultralytics import YOLO
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger()
 
-# Health monitoring thresholds
-MEMORY_WARNING_THRESHOLD_MB = 500
-INFERENCE_TIME_WARNING_MS = 300
+# Health monitoring thresholds. Memory sits at ~930-940MB in normal operation
+# with current torch/ultralytics (measured post-deploy 2026-08-31; it was
+# 420-630MB on the previous image, and gc reclaims none of it — this is the
+# model working set, not a leak). Model inference runs 200-400ms; the camera
+# fetch via Blue Iris is 100-1100ms.
+MEMORY_WARNING_THRESHOLD_MB = 1200
+INFERENCE_TIME_WARNING_MS = 1000
+CAMERA_TIME_WARNING_MS = 3000
 HEARTBEAT_FILE = Path("/tmp/garagecam_heartbeat")
+
+# With the Blue Iris snapshot source (~80ms/frame) there is headroom to poll
+# faster than the camera's own snapshot encoder ever allowed. At 5s the EMA in
+# Device reaches the 0.9 arrival threshold in ~45s instead of ~2.3 min.
+CYCLE_SECONDS = 5.0
+
+# Scene sanity gates. A zero score only means "absent" when we can see the whole
+# bay, so hold the last known state whenever the view is obstructed or the frame
+# is unreadable. Without this, one occluded frame while someone walks past a
+# parked car drops the rolling average below the departure threshold in three
+# cycles and reports the car as gone.
+PERSON_HOLD_CONFIDENCE = 0.25
+# Keep holding for a while after a person leaves frame: they usually leave by
+# getting into a car, and the car backing out occludes whatever is behind it
+# with nobody visible to trigger the person hold. Observed 2026-08-31 06:31 —
+# the garbage bin "departed" for 54s while the Civic backed over its line of
+# sight. Wall-clock, not cycles: dark frames or a camera outage age the grace
+# out instead of preserving it for hours.
+PERSON_EXIT_GRACE_SECONDS = 60.0
+# Past this, holding is itself a problem; derived so a cycle-time change
+# cannot silently rescale it.
+MAX_HOLD_SECONDS = 600
+MAX_HOLD_CYCLES = int(MAX_HOLD_SECONDS / CYCLE_SECONDS)
+
+# "something" is a synthetic aggregate, not a detected class.
+SYNTHETIC_KEYS = frozenset({"something"})
+
+# Separate from the process LWT: the process can be perfectly healthy while
+# blind. Presence entities gate on both.
+CAMERA_STATUS_TOPIC = "garagecam/camera/status"
+
+# The process status topic (the LWT) carries three values: "online", "offline"
+# (the broker's LWT -- the process died or lost the broker) and "stopped" (a
+# graceful exit, e.g. podman auto-update). HA's default payload_not_available is
+# "offline" and other payloads are ignored, so without this template a graceful
+# exit would leave every entity available and repeating its last state. The
+# status sensor itself shows the raw value, which is what lets an automation
+# tell a planned restart from a crash.
+PROCESS_AVAILABILITY_TEMPLATE = "{{ 'online' if value == 'online' else 'offline' }}"
+
+# How long the camera must stay unreadable before the presence entities are
+# declared unavailable. The camera reboots itself weekly and takes a minute or
+# so to come back; flapping every entity unavailable and back on a scheduled
+# reboot is worse than briefly holding the last known state, which is anyway
+# still correct — nothing can drive in or out during the reboot.
+#
+# Elapsed monotonic time, NOT a cycle count. A failing cycle does not take
+# CYCLE_SECONDS: it costs the fetch timeout, and with the direct fallback it
+# costs two, so counting cycles would stretch a nominal 2 minutes to well over
+# 10. Same reasoning and same clock as PERSON_EXIT_GRACE_SECONDS above.
+CAMERA_UNAVAILABLE_AFTER_SECONDS = 120.0
+
+# Hold reasons. resolve_hold dispatches on these, so they are contract
+# values shared with get_hold_reason — not just log text.
+HOLD_PERSON = "person in garage"
+HOLD_NO_OBJECTS = "no objects detected"
+HOLD_PERSON_RECENT = "person recently left"
+
+# Person presence comes from Frigate, which watches the same camera, rather than
+# from this model's own person class. Under IR the model scored a bag and lid in
+# the bottom-left corner as a person (0.25-0.45) in 82 of 96 frames sampled over
+# 2026-10-01..04, holding every presence entity frozen for 13-16 h a night.
+# Frigate's tracker never saw that person. The model's person score is only the
+# fallback for when Frigate cannot vouch for the camera.
+FRIGATE_PERSON_TOPIC = "frigate/garage/person"
+FRIGATE_STATS_TOPIC = "frigate/stats"
+FRIGATE_CAMERA = "garage"
+# Frigate publishes stats every 60 s. Three missed intervals, or a camera that
+# is not delivering frames (go2rtc has stalled this stream at 0 fps before),
+# and its zero person count proves nothing.
+FRIGATE_STATS_MAX_AGE_SECONDS = 180
+FRIGATE_MIN_CAMERA_FPS = 1.0
 
 
 _process = psutil.Process()
@@ -59,16 +136,210 @@ def get_health_metrics():
     }
 
 
-def get_health_status(memory_mb, inference_ms, camera_ok):
+def get_health_status(memory_mb, inference_ms, camera_ms, camera_ok, hold_cycles=0):
     """Determine overall health status."""
     if not camera_ok:
         return "camera_error"
     if (
         memory_mb > MEMORY_WARNING_THRESHOLD_MB
         or inference_ms > INFERENCE_TIME_WARNING_MS
+        or camera_ms > CAMERA_TIME_WARNING_MS
+        or hold_cycles >= MAX_HOLD_CYCLES
     ):
         return "degraded"
     return "healthy"
+
+
+class FrigatePersons:
+    """Frigate's person count for the garage camera, fed from MQTT.
+
+    The count topic is not retained and only changes on an edge, so it starts
+    at 0: a person already standing in the garage when this process starts is
+    missed until Frigate's count next changes.
+    """
+
+    def __init__(self):
+        self.count = 0
+        self.camera_fps = None
+        self.stats_at = None
+
+    def on_count(self, payload):
+        try:
+            self.count = int(payload)
+        except ValueError:
+            log.warning("Unexpected Frigate person count: %r", payload)
+
+    def on_stats(self, payload, now=None):
+        try:
+            camera = json.loads(payload)["cameras"][FRIGATE_CAMERA]
+            self.camera_fps = float(camera["camera_fps"])
+        except ValueError, KeyError, TypeError:
+            log.warning("Frigate stats without camera %s", FRIGATE_CAMERA)
+            self.camera_fps = None
+        self.stats_at = time.monotonic() if now is None else now
+
+    def person_present(self, now=None):
+        """True/False from Frigate, or None when Frigate cannot be trusted."""
+        if now is None:
+            now = time.monotonic()
+        if (
+            self.stats_at is None
+            or now - self.stats_at > FRIGATE_STATS_MAX_AGE_SECONDS
+            or self.camera_fps is None
+            or self.camera_fps < FRIGATE_MIN_CAMERA_FPS
+        ):
+            return None
+        return self.count > 0
+
+
+def get_hold_reason(objects, frigate_person=None):
+    """Return why detections should not update state, or None to proceed.
+
+    A person in frame may be standing between the camera and a vehicle, so a
+    zero score for that vehicle means nothing. A frame with no detections at
+    all is not an empty garage, it is a black or broken image; recognizing any
+    one object is enough to trust the rest of the frame.
+
+    frigate_person is Frigate's verdict (True/False) and overrides this model's
+    person score; None falls back to the model.
+    """
+    if frigate_person is None:
+        person = objects.get("person", 0.0) > PERSON_HOLD_CONFIDENCE
+    else:
+        person = frigate_person
+    if person:
+        return HOLD_PERSON
+    if not set(objects) - SYNTHETIC_KEYS:
+        return HOLD_NO_OBJECTS
+    return None
+
+
+def publish_camera_availability(mqtt_client, available, previous, blind_for=None):
+    """Publish camera availability, but only when it changes.
+
+    Returns the state now published, for the caller to carry forward. `previous`
+    of None means nothing has been announced yet, so the first cycle always
+    publishes and Home Assistant is never left waiting on a retained value that
+    does not exist.
+    """
+    if previous == available:
+        return previous
+    mqtt_client.publish(
+        CAMERA_STATUS_TOPIC,
+        "online" if available else "offline",
+        retain=True,
+    )
+    if available:
+        log.info("Camera readable again — presence entities available")
+    else:
+        log.warning(
+            "No frame for %.0fs — marking presence entities unavailable rather "
+            "than reporting stale positions",
+            blind_for if blind_for is not None else CAMERA_UNAVAILABLE_AFTER_SECONDS,
+        )
+    return available
+
+
+def camera_is_blind(failing_since, now=None):
+    """Has the camera been unreadable long enough to declare ourselves blind?
+
+    Elapsed time rather than a count of failed cycles: a failing cycle costs
+    the fetch timeout rather than CYCLE_SECONDS, and with the direct fallback
+    it costs two, so a cycle count would drift to several times the intended
+    window exactly when it matters.
+
+    Monotonic, so an NTP step or a manual clock change cannot expire the window
+    early or stretch it — same clock resolve_hold() uses.
+    """
+    if failing_since is None:
+        return False
+    now = now if now is not None else time.monotonic()
+    return (now - failing_since) >= CAMERA_UNAVAILABLE_AFTER_SECONDS
+
+
+def resolve_hold(objects, person_seen_at, now=None, frigate_person=None):
+    """Combine the frame's hold reason with the person-exit grace period.
+
+    Returns (hold_reason, person_seen_at). A person in frame stamps the
+    sighting time; a clear frame within PERSON_EXIT_GRACE_SECONDS of it
+    still holds; a frame held for any other reason leaves the stamp alone.
+    Being wall-clock based, the grace expires during dark frames or camera
+    outages rather than firing for a person seen long ago.
+    """
+    if now is None:
+        now = time.monotonic()
+    reason = get_hold_reason(objects, frigate_person)
+    if reason == HOLD_PERSON:
+        return reason, now
+    if (
+        reason is None
+        and person_seen_at is not None
+        and now - person_seen_at < PERSON_EXIT_GRACE_SECONDS
+    ):
+        return HOLD_PERSON_RECENT, person_seen_at
+    return reason, person_seen_at
+
+
+def track_spike(samples, value, label, threshold):
+    """Record a timing sample and warn when it jumps above its recent average."""
+    samples.append(value)
+    if len(samples) > 100:
+        del samples[:-50]
+    if len(samples) > 1:
+        avg = sum(samples[-10:]) / min(len(samples), 10)
+        if value > avg * 1.5 and value > threshold:
+            log.warning("%s time spike: %dms (avg: %.0fms)", label, value, avg)
+
+
+def interruptible_sleep(seconds, killer, step=0.5):
+    """Sleep in short steps so a SIGTERM is noticed without waiting a full cycle."""
+    deadline = time.time() + seconds
+    while not killer.kill_now:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        time.sleep(min(step, remaining))
+
+
+def publish_health(mqtt_client, camera_ms, inference_ms, camera_ok, hold_cycles):
+    """Log and publish health metrics.
+
+    Runs on failed cycles too, so a camera outage actually reaches Home
+    Assistant rather than leaving the sensor stale at its last good value.
+    """
+    metrics = get_health_metrics()
+    log.info(
+        "Health: memory=%.1fMB (%.1f%%), camera=%dms, inference=%dms",
+        metrics["memory_mb"],
+        metrics["memory_percent"],
+        camera_ms,
+        inference_ms,
+    )
+
+    # Force garbage collection if memory is high
+    if metrics["memory_mb"] > MEMORY_WARNING_THRESHOLD_MB:
+        log.warning(
+            "Memory usage high (%.1fMB), forcing garbage collection",
+            metrics["memory_mb"],
+        )
+        gc.collect()
+        metrics = get_health_metrics()
+        log.info(
+            "After GC: memory=%.1fMB (%.1f%%)",
+            metrics["memory_mb"],
+            metrics["memory_percent"],
+        )
+
+    health_payload = {
+        "memory_mb": metrics["memory_mb"],
+        "camera_ms": camera_ms,
+        "inference_ms": inference_ms,
+        "hold_cycles": hold_cycles,
+        "status": get_health_status(
+            metrics["memory_mb"], inference_ms, camera_ms, camera_ok, hold_cycles
+        ),
+    }
+    mqtt_client.publish("garagecam/health", json.dumps(health_payload))
 
 
 class GracefulKiller:
@@ -110,6 +381,11 @@ def on_connect(client, userdata, flags, reason_code, properties):
     client.publish("garagecam/status", "online", retain=True)
     client.publish("garagecam/process/state", "running", retain=True)
     client.publish("garagecam/version/state", get_version(), retain=True)
+    # Subscribe here, not once at startup: a reconnect starts a clean session
+    # and drops every subscription.
+    client.subscribe("homeassistant/status")
+    client.subscribe(FRIGATE_PERSON_TOPIC)
+    client.subscribe(FRIGATE_STATS_TOPIC)
     # Republish discovery so HA recovers from a broker restart that drops retained messages.
     if userdata:
         publish_discovery(client, userdata["devices"], userdata["lwt"])
@@ -159,7 +435,18 @@ def publish_discovery(mqtt_client, devices, lwt):
             "state_topic": f"{device.hass_name}/state",
             "device_class": "presence",
             "uniq_id": f"garagecam-{device.hass_name}",
-            "availability_topic": lwt,
+            # These report what the camera can see, so they must be available
+            # only when the process is up AND a frame is actually arriving.
+            # With the process LWT alone, Blue Iris going down on 2026-09-05
+            # left binary_sensor.honda_civic reading "home" for 18h after the
+            # car had left: every fetch timed out while MQTT publishing carried
+            # on, so Home Assistant saw a healthy sensor repeating a stale
+            # value. availability_mode "all" requires both topics to be online.
+            "availability": [
+                {"topic": lwt, "value_template": PROCESS_AVAILABILITY_TEMPLATE},
+                {"topic": CAMERA_STATUS_TOPIC},
+            ],
+            "availability_mode": "all",
             "device": device_info,
         }
         mqtt_client.publish(
@@ -173,6 +460,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "device_class": "problem",
         "uniq_id": "garagecam-nfs_storage",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -185,6 +473,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "state_topic": "garagecam/process/state",
         "uniq_id": "garagecam-process",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -199,6 +488,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "json_attributes_topic": "garagecam/health",
         "uniq_id": "garagecam-health",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -224,6 +514,7 @@ def publish_discovery(mqtt_client, devices, lwt):
         "uniq_id": "garagecam-version",
         "entity_category": "diagnostic",
         "availability_topic": lwt,
+        "availability_template": PROCESS_AVAILABILITY_TEMPLATE,
         "device": device_info,
     }
     mqtt_client.publish(
@@ -235,7 +526,15 @@ def publish_discovery(mqtt_client, devices, lwt):
 
 
 def on_message(mqtt_client, userdata, msg):
-    if msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
+    frigate = (userdata or {}).get("frigate")
+    if msg.topic == FRIGATE_PERSON_TOPIC:
+        if frigate is not None:
+            frigate.on_count(msg.payload.decode())
+            log.info("Frigate person count: %s", frigate.count)
+    elif msg.topic == FRIGATE_STATS_TOPIC:
+        if frigate is not None:
+            frigate.on_stats(msg.payload.decode())
+    elif msg.topic == "homeassistant/status" and msg.payload.decode() == "online":
         log.info("Home Assistant came online, re-publishing discovery configs")
         publish_discovery(mqtt_client, userdata["devices"], userdata["lwt"])
     else:
@@ -271,17 +570,19 @@ def main():
 
     sd = sdnotify.SystemdNotifier()
     sd.notify("STATUS=Loading")
-    model = YOLO("best.pt")  # pretrained YOLOv8n model
+    # Trained on this garage camera (Roboflow egge-public/garage).
+    model = YOLO("best.pt")
     config = load_config()
     mqtt_config = get_section(config, "mqtt")
     lwt = "garagecam/status"
+    frigate = FrigatePersons()
     devices = list(
         map(lambda name: Device(name), ["Honda Civic", "Honda CR-V", "Garbage Bin"]),
     )
     mqtt_client = paho.Client(
         paho.CallbackAPIVersion.VERSION2,
         "garage-cam",
-        userdata={"devices": devices, "lwt": lwt},
+        userdata={"devices": devices, "lwt": lwt, "frigate": frigate},
     )
     mqtt_client.will_set(lwt, "offline", retain=True)
     mqtt_client.enable_logger(logger=log)
@@ -295,7 +596,6 @@ def main():
         "Connecting to MQTT broker at %s:%s", mqtt_config["host"], mqtt_config["port"]
     )
     connect_mqtt(mqtt_client, mqtt_config["host"], int(mqtt_config["port"]))
-    mqtt_client.subscribe("homeassistant/status")
     mqtt_client.loop_start()
 
     # curl -X GET -H "Authorization: Bearer config['hass']['token'] -H "Content-Type: application/json" http://homeassistant.home:8123/api/states/binary_sensor.garbage_bin_ha | python -m json.tool
@@ -305,83 +605,58 @@ def main():
 
     # Health monitoring state
     cycle_count = 0
+    hold_cycles = 0
+    person_seen_at = None
+    camera_times = []
     inference_times = []
     camera_ok = True
+    camera_failing_since = None
+    camera_available = None  # None = not yet announced, so the first cycle publishes
     img = None
 
     while not killer.kill_now:
         start = time.time()
         faulthandler.dump_traceback_later(240, repeat=False)
+        camera_ms = 0
+        inference_ms = 0
         try:
             if img is not None:
                 img.close()
                 img = None
-            objects, img = detectframe(model, get_image(config["camera"]))
-            inference_ms = int((time.time() - start) * 1000)
-            inference_times.append(inference_ms)
+            # Timed separately: the fetch is a network round trip to the camera
+            # and the inference is local, and they fail for unrelated reasons.
+            frame = get_image(config["camera"])
+            camera_ms = int((time.time() - start) * 1000)
+            inference_start = time.time()
+            objects, img = detectframe(model, frame)
+            inference_ms = int((time.time() - inference_start) * 1000)
             camera_ok = True
+            camera_failing_since = None
+            camera_available = publish_camera_availability(
+                mqtt_client, True, camera_available
+            )
 
-            # Track inference time spikes
-            if len(inference_times) > 1:
-                avg_inference = sum(inference_times[-10:]) / min(
-                    len(inference_times), 10
-                )
-                if (
-                    inference_ms > avg_inference * 1.5
-                    and inference_ms > INFERENCE_TIME_WARNING_MS
-                ):
+            track_spike(camera_times, camera_ms, "Camera fetch", CAMERA_TIME_WARNING_MS)
+            track_spike(
+                inference_times, inference_ms, "Inference", INFERENCE_TIME_WARNING_MS
+            )
+
+            hold_reason, person_seen_at = resolve_hold(
+                objects, person_seen_at, frigate_person=frigate.person_present()
+            )
+            if hold_reason:
+                hold_cycles += 1
+                if hold_cycles % MAX_HOLD_CYCLES == 0:
                     log.warning(
-                        "Inference time spike: %dms (avg: %.0fms)",
-                        inference_ms,
-                        avg_inference,
+                        "Held state for %d cycles (%s) — detections may be stuck",
+                        hold_cycles,
+                        hold_reason,
                     )
-
-            # Keep only recent inference times
-            if len(inference_times) > 100:
-                inference_times = inference_times[-50:]
-
-            # Log health metrics periodically (every 10 cycles, ~2.5 minutes)
-            cycle_count += 1
-            if cycle_count % 10 == 0:
-                metrics = get_health_metrics()
-                log.info(
-                    "Health: memory=%.1fMB (%.1f%%), inference=%dms",
-                    metrics["memory_mb"],
-                    metrics["memory_percent"],
-                    inference_ms,
-                )
-
-                # Force garbage collection if memory is high
-                if metrics["memory_mb"] > MEMORY_WARNING_THRESHOLD_MB:
-                    log.warning(
-                        "Memory usage high (%.1fMB), forcing garbage collection",
-                        metrics["memory_mb"],
-                    )
-                    gc.collect()
-                    metrics_after = get_health_metrics()
-                    log.info(
-                        "After GC: memory=%.1fMB (%.1f%%)",
-                        metrics_after["memory_mb"],
-                        metrics_after["memory_percent"],
-                    )
-
-                # Publish health status to MQTT
-                health_payload = {
-                    "memory_mb": metrics["memory_mb"],
-                    "inference_ms": inference_ms,
-                    "status": get_health_status(
-                        metrics["memory_mb"], inference_ms, camera_ok
-                    ),
-                }
-                mqtt_client.publish("garagecam/health", json.dumps(health_payload))
-
-            if "person" in objects and objects["person"] > 0.6:
-                log.info("Skipping while person is in garage")
-                gc.collect()
+                else:
+                    log.info("Holding state: %s", hold_reason)
                 continue
-            if objects["something"] < 0.1:
-                log.info("Nothing is in garage")
-                # continue
+            hold_cycles = 0
+
             for device in devices:
                 command = None
                 if device.hass_name in objects:
@@ -405,18 +680,36 @@ def main():
             gc.collect()
         except UnidentifiedImageError:
             camera_ok = False
+            camera_failing_since = camera_failing_since or time.monotonic()
             log.warning("Failed to decode image from camera")
         except requests.exceptions.RequestException as e:
             camera_ok = False
+            camera_failing_since = camera_failing_since or time.monotonic()
             log.warning("Camera connection error: %s", e)
         except KeyboardInterrupt:
             break
         finally:
+            # In the finally block so a cycle that failed to reach the camera
+            # still reports, and so a held cycle still reports.
+            # The None check is camera_is_blind()'s own first test, repeated so
+            # the type checker can see camera_failing_since is a float below.
+            if camera_failing_since is not None and camera_is_blind(
+                camera_failing_since
+            ):
+                camera_available = publish_camera_availability(
+                    mqtt_client,
+                    False,
+                    camera_available,
+                    time.monotonic() - camera_failing_since,
+                )
+            cycle_count += 1
+            if cycle_count % 10 == 0:
+                publish_health(
+                    mqtt_client, camera_ms, inference_ms, camera_ok, hold_cycles
+                )
             sd.notify("WATCHDOG=1")
             HEARTBEAT_FILE.touch()
-            delay = 15.0 - (time.time() - start)
-            if delay > 0.0:
-                time.sleep(delay)
+            interruptible_sleep(CYCLE_SECONDS - (time.time() - start), killer)
         try:
             nfs_ok = sync_local_to_remote(config["file"]["path"])
             mqtt_client.publish(
@@ -433,10 +726,12 @@ def main():
 def graceful_shutdown(mqtt_client, lwt, sd):
     try:
         mqtt_client.publish("garagecam/process/state", "stopped", retain=True)
-        publish_result = mqtt_client.publish(lwt, payload="offline", retain=True)
+        # "stopped", not "offline": a planned exit, so HA can wait for the
+        # replacement instead of alerting. "offline" is left to the LWT.
+        publish_result = mqtt_client.publish(lwt, payload="stopped", retain=True)
         publish_result.wait_for_publish(timeout=5)
     except (RuntimeError, ValueError, OSError) as e:
-        log.warning("Could not publish offline status: %s", e)
+        log.warning("Could not publish stopped status: %s", e)
     mqtt_client.disconnect()  # disconnect gracefully
     mqtt_client.loop_stop()  # stops network loop
     log.info("Gracefully exiting")
