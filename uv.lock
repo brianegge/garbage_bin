@@ -467,7 +467,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "sdnotify", specifier = ">=0.3.2" },
-    { name = "ultralytics", specifier = "==8.4.189" },
+    { name = "ultralytics", specifier = "==8.4.197" },
 ]
 provides-extras = ["dev"]
 
@@ -1457,7 +1457,7 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.189"
+version = "8.4.197"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -1467,16 +1467,15 @@ dependencies = [
     { name = "pillow" },
     { name = "polars" },
     { name = "psutil" },
-    { name = "pyyaml" },
     { name = "requests" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "ultralytics-platform" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/04/bf075e785597593b977c13e74f35373505965415eff2e8abb75b4c7e9f67/ultralytics-8.4.189.tar.gz", hash = "sha256:42ee386b218ef1e364f8fbe5e0a9d593d64893e4de4131bc0a17c02019f6449f", size = 1281167, upload-time = "2026-10-25T13:25:12.649Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/ff/ea770f0ce1c9ba33fbe303e2067f6c889f8af580b7d9902c51fdc271ce2b/ultralytics-8.4.197.tar.gz", hash = "sha256:359806d30eba4ced28994850852879792385c789adbcc3fb82a9e83925f0e12d", size = 1298386, upload-time = "2026-11-01T02:30:19.093Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/c3/d1b6e2a61e5fb47c34ab812c7f6e0978d36742585b37b9ded9447d9cf127/ultralytics-8.4.189-py3-none-any.whl", hash = "sha256:eb14b93d1eb4894dc60e25d31bb865db2336d4705d386764ebd2f5cd42cec8a5", size = 1430980, upload-time = "2026-10-25T13:25:07.037Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/4a/02edad2e27aac6ec6ef2c22fc93273cb421f3f60297c77513d686d8ab2cf/ultralytics-8.4.197-py3-none-any.whl", hash = "sha256:179a89cb1d0f962ec493b99d8f9f4b868723a382b47338dee9378ab55beef051", size = 1439011, upload-time = "2026-11-01T02:30:14.492Z" },
 ]
 
 [[package]]
