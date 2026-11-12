@@ -1,4 +1,4 @@
-ARG VARIANT="3.14-trixie"
+ARG VARIANT="3.15-trixie"
 FROM mcr.microsoft.com/devcontainers/python:${VARIANT}
 
 ARG DEBIAN_FRONTEND=noninteractive
