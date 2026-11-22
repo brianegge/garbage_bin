@@ -1500,14 +1500,14 @@ wheels = [
 
 [[package]]
 name = "ultralytics-platform"
-version = "0.1.120"
+version = "0.1.121"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/21/c9/ceb69b72aad88497c518016ca9d46da0a5bee7a89b9537b9d815fe2095d6/ultralytics_platform-0.1.120.tar.gz", hash = "sha256:364e0fc69ab5bd059264f0f5ca1d4ee640aebbcbbef7b18ccfd5b8919594b602", size = 95753, upload-time = "2026-11-21T00:27:02.599Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/27/ce44bbff1cc556150d3ae12dcd9be6b9b2304a0ab5eeb1365ba64bf5cc44/ultralytics_platform-0.1.121.tar.gz", hash = "sha256:59d4f161808d985d8ce44259e1ff724d7b124520f90b81dafe7846a89ef17c74", size = 95749, upload-time = "2026-11-22T15:04:16.321Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/ae/dbf3b8d37d255aebdd3cf179e966bf1b0c525d8edd853c5858717a8472d5/ultralytics_platform-0.1.120-py3-none-any.whl", hash = "sha256:cf2e5f2bb541e90f8383b5ec208dcf351dde4c7df3fab782e1b30fb8f76c6a94", size = 104167, upload-time = "2026-11-21T00:27:01.469Z" },
+    { url = "https://files.pythonhosted.org/packages/19/80/6034843b93aae3e6cfa5b18e4abdbead2f590416213f38d1d6ee641895ea/ultralytics_platform-0.1.121-py3-none-any.whl", hash = "sha256:35949abf66de70920dbd6f6434857b003a067df403209400b6c4ce692c52d9b8", size = 104169, upload-time = "2026-11-22T15:04:14.795Z" },
 ]
 
 [[package]]
